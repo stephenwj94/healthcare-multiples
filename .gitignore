@@ -1,0 +1,33 @@
+# Environment / secrets
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+data/fetch.log
+*.log
+
+# Editor
+.vscode/
+.idea/
+
+# FactSet MCP raw cache
+data/factset_raw/
+
+# Claude internal
+.claude/

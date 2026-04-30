@@ -1,0 +1,178 @@
+"""
+One-shot generator: reads the Permira HC xlsx and writes config/company_registry.py
+with the full healthcare universe in the schema the rest of the app expects.
+
+Usage:
+    python scripts/build_registry.py
+"""
+import re
+from pathlib import Path
+import pandas as pd
+
+XLSX = "/Users/stephenjacobs/Downloads/Permira_HC_Public_Universe_v2.xlsx"
+OUT = Path(__file__).resolve().parent.parent / "config" / "company_registry.py"
+
+SEGMENT_MAP = {
+    "1. Pharma": "pharma",
+    "2. Consumer Health": "consumer_health",
+    "3. MedTech": "medtech",
+    "4. LST / Dx / Bioprocessing": "life_sci_tools",
+    "5. Asset Light Services": "services",
+    "6. Asset Heavy (CDMOs)": "cdmo",
+    "7. Health Tech": "health_tech",
+}
+
+# Exchange suffix map for Yahoo Finance (non-US).
+# For dual-listings like "NYSE/CSE", we prefer the US listing → no suffix.
+EXCHANGE_SUFFIX = {
+    "NASDAQ": "", "NYSE": "", "AMEX": "",
+    "LSE": ".L", "AIM/LSE": ".L",
+    "Xetra": ".DE",
+    "Euronext Paris": ".PA",
+    "Euronext Amsterdam": ".AS",
+    "Euronext Brussels": ".BR",
+    "Euronext Dublin": ".IR",
+    "TSE": ".T",
+    "TSX": ".TO",
+    "SWX": ".SW",
+    "HKEX": ".HK",
+    "ASX": ".AX",
+    "KOSPI": ".KS",
+    "CSE": ".CO",      # Copenhagen
+    "Helsinki": ".HE",
+    "BME": ".MC",
+    "Borsa Italiana": ".MI",
+    "NSE/BSE": ".NS",
+    "B3": ".SA",
+    "Ljubljana SE": ".LJ",
+    "SZSE": ".SZ",
+}
+
+# Reporting currency by exchange suffix (rough; many ADRs report USD anyway).
+CURRENCY_BY_EXCHANGE = {
+    ".L": "GBP", ".DE": "EUR", ".PA": "EUR", ".AS": "EUR", ".BR": "EUR", ".IR": "EUR",
+    ".T": "JPY", ".TO": "CAD", ".SW": "CHF", ".HK": "HKD", ".AX": "AUD",
+    ".KS": "KRW", ".CO": "DKK", ".HE": "EUR", ".MC": "EUR", ".MI": "EUR",
+    ".NS": "INR", ".SA": "BRL", ".LJ": "EUR", ".SZ": "CNY",
+}
+
+
+def yahoo_ticker(ticker: str, exchange: str) -> tuple[str, str | None]:
+    """Return (yahoo_ticker, reporting_currency_or_None)."""
+    t = str(ticker).strip()
+    ex = str(exchange).strip()
+
+    # Try the full exchange string first (handles "NSE/BSE", "AIM/LSE" as known keys).
+    if ex in EXCHANGE_SUFFIX:
+        suffix = EXCHANGE_SUFFIX[ex]
+        return f"{t}{suffix}", CURRENCY_BY_EXCHANGE.get(suffix)
+
+    # Otherwise pick the first listing for dual-listings, prefer US.
+    parts = [p.strip() for p in ex.split("/")]
+    primary = next((p for p in parts if p in ("NASDAQ", "NYSE", "AMEX")), parts[0])
+
+    suffix = EXCHANGE_SUFFIX.get(primary, "")
+    if suffix == "" and primary not in ("NASDAQ", "NYSE", "AMEX"):
+        # Unknown exchange — fall back to plain ticker (will likely fail in yfinance).
+        return t, None
+
+    # Some tickers already contain dots (e.g. "BRK.B"). Yahoo uses "-" for these,
+    # but for healthcare we don't have that case — leave as-is.
+    return f"{t}{suffix}", CURRENCY_BY_EXCHANGE.get(suffix)
+
+
+def slug(s: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", str(s).strip()).strip("_").lower()
+    return s
+
+
+def main() -> None:
+    df = pd.read_excel(XLSX, sheet_name="Master")
+    df = df.dropna(subset=["Ticker", "Company"]).copy()
+
+    by_segment: dict[str, list[dict]] = {seg: [] for seg in SEGMENT_MAP.values()}
+
+    for _, row in df.iterrows():
+        sector = str(row["Sector"]).strip()
+        if sector not in SEGMENT_MAP:
+            continue
+        seg = SEGMENT_MAP[sector]
+        sub = slug(row["Sub-Bucket"]) if pd.notna(row["Sub-Bucket"]) else None
+        yt, ccy = yahoo_ticker(row["Ticker"], row["Exchange"])
+        entry = {
+            "ticker": str(row["Ticker"]).strip(),
+            "yahoo_ticker": yt,
+            "name": str(row["Company"]).strip(),
+            "segment": seg,
+            "sub_segment": sub,
+            "fy_end_month": 12,
+            "country": str(row["HQ Country"]).strip() if pd.notna(row["HQ Country"]) else None,
+        }
+        if ccy and ccy != "USD":
+            entry["reporting_currency"] = ccy
+        by_segment[seg].append(entry)
+
+    # Write registry file.
+    lines = [
+        '"""',
+        "Master company universe for Healthcare Public Market Screening.",
+        "Source: Permira_HC_Public_Universe_v2.xlsx (filtered for >=$150M cap, public, no",
+        "active definitive agreements).",
+        "",
+        "Each entry:",
+        "  - ticker: Display ticker (shown in tables)",
+        "  - yahoo_ticker: Ticker for yfinance API calls (suffix added for non-US listings)",
+        "  - name: Company name",
+        "  - segment: pharma | consumer_health | medtech | life_sci_tools | services | cdmo | health_tech",
+        "  - sub_segment: Optional sub-grouping (slug of sub-bucket from source)",
+        "  - fy_end_month: Fiscal year end month (1-12). Default 12 (calendar); refine if needed.",
+        "  - country: HQ country (informational)",
+        "  - reporting_currency: Set when non-USD (drives currency conversion downstream)",
+        "",
+        "Generated by scripts/build_registry.py — re-run to regenerate.",
+        '"""',
+        "",
+        "COMPANY_REGISTRY = [",
+    ]
+
+    segment_headers = {
+        "pharma": "PHARMA",
+        "consumer_health": "CONSUMER HEALTH",
+        "medtech": "MEDTECH",
+        "life_sci_tools": "LIFE SCIENCE TOOLS / DIAGNOSTICS / BIOPROCESSING",
+        "services": "ASSET-LIGHT SERVICES (CROs, Hubs, Specialty Pharmacy)",
+        "cdmo": "CDMOs (Asset-Heavy Services)",
+        "health_tech": "HEALTH TECH",
+    }
+
+    for seg, header in segment_headers.items():
+        rows = by_segment[seg]
+        if not rows:
+            continue
+        lines.append("    # " + "=" * 73)
+        lines.append(f"    # {header}  ({len(rows)} companies)")
+        lines.append("    # " + "=" * 73)
+        for r in rows:
+            parts = [
+                f'"ticker": {r["ticker"]!r}',
+                f'"yahoo_ticker": {r["yahoo_ticker"]!r}',
+                f'"name": {r["name"]!r}',
+                f'"segment": {r["segment"]!r}',
+                f'"sub_segment": {r["sub_segment"]!r}',
+                f'"fy_end_month": {r["fy_end_month"]}',
+                f'"country": {r["country"]!r}',
+            ]
+            if "reporting_currency" in r:
+                parts.append(f'"reporting_currency": {r["reporting_currency"]!r}')
+            lines.append("    {" + ", ".join(parts) + "},")
+        lines.append("")
+
+    lines.append("]")
+    lines.append("")
+
+    OUT.write_text("\n".join(lines))
+    print(f"Wrote {OUT} — {sum(len(v) for v in by_segment.values())} companies across {len(by_segment)} segments")
+
+
+if __name__ == "__main__":
+    main()
