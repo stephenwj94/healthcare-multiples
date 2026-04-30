@@ -2,7 +2,7 @@
 Generate the FactSet override Excel template.
 
 Run once to create data/factset_overrides.xlsx with:
-  - One sheet per segment (Horizontal SW, Vertical SW, Infrastructure, Cybersecurity)
+  - One sheet per segment (Pharma, Consumer Health, MedTech, Life Sci Tools, Services, CDMOs, Health Tech)
   - All companies pre-populated with ticker, name, segment
   - FactSet-friendly column headers matching DB fields
   - Blank cells for user to paste FactSet data into
