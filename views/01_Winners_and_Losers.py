@@ -277,10 +277,13 @@ _WL_CAT_BASE = (
     " display:inline-block; white-space:nowrap;"
 )
 _WL_CAT_PILLS = {
-    "Horizontal SW":  f"background:#ECEEF6; color:#29335C; {_WL_CAT_BASE}",
-    "Vertical SW":    f"background:#EDFAF3; color:#1D6A40; {_WL_CAT_BASE}",
-    "Infrastructure": f"background:#FEF9E7; color:#A87000; {_WL_CAT_BASE}",
-    "Cybersecurity":  f"background:#FDEDEF; color:#B01E29; {_WL_CAT_BASE}",
+    "Pharma":          f"background:#E9EFFC; color:#1D4ED8; {_WL_CAT_BASE}",
+    "Consumer Health": f"background:#E6F4EE; color:#047857; {_WL_CAT_BASE}",
+    "MedTech":         f"background:#FCEAEA; color:#B91C1C; {_WL_CAT_BASE}",
+    "Life Sci Tools":  f"background:#F1EAFB; color:#6D28D9; {_WL_CAT_BASE}",
+    "Services":        f"background:#FEF3E2; color:#B45309; {_WL_CAT_BASE}",
+    "CDMOs":           f"background:#FDECE0; color:#C2410C; {_WL_CAT_BASE}",
+    "Health Tech":     f"background:#E2F1F5; color:#0E7490; {_WL_CAT_BASE}",
 }
 _WL_CAT_DEFAULT = f"background:#F1F5F9; color:#64748B; {_WL_CAT_BASE}"
 
@@ -1059,17 +1062,17 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
     # Build rebased series for each benchmark
     series_map = {}
 
-    # 1. Permira Software Universe — average of all company prices, rebased
+    # 1. Permira Healthcare Universe — average of all company prices, rebased
     if not close_df.empty:
-        sw_daily = close_df[(close_df.index >= start_12m) & (close_df.index <= as_of)]
-        if not sw_daily.empty:
+        hc_daily = close_df[(close_df.index >= start_12m) & (close_df.index <= as_of)]
+        if not hc_daily.empty:
             # Normalize each company to 100, then average
-            first_valid = sw_daily.bfill().iloc[0]
+            first_valid = hc_daily.bfill().iloc[0]
             first_valid = first_valid.replace(0, np.nan)
-            normed = sw_daily.div(first_valid) * 100
-            sw_avg = normed.mean(axis=1).dropna()
-            if not sw_avg.empty:
-                series_map["Permira Software Universe"] = sw_avg
+            normed = hc_daily.div(first_valid) * 100
+            hc_avg = normed.mean(axis=1).dropna()
+            if not hc_avg.empty:
+                series_map["Permira Healthcare Universe"] = hc_avg
 
     # 2. S&P 500, NASDAQ
     for name, display in [("S&P 500", "S&P 500"), ("NASDAQ", "NASDAQ")]:
@@ -1086,7 +1089,7 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
 
     # Colors for each line
     colors = {
-        "Permira Software Universe": "#F59E0B",  # orange
+        "Permira Healthcare Universe": "#F59E0B",  # orange
         "S&P 500": "#6B7280",                     # gray
         "NASDAQ": "#8B5CF6",                       # purple
     }
@@ -1095,10 +1098,10 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
 
     # Add line traces — S&P/NASDAQ as subtle thin lines, Permira bold
     hover_names = {
-        "Permira Software Universe": "SW Index",
+        "Permira Healthcare Universe": "HC Index",
     }
     for name, s in series_map.items():
-        is_permira = name == "Permira Software Universe"
+        is_permira = name == "Permira Healthcare Universe"
         fig.add_trace(go.Scatter(
             x=s.index, y=s.values,
             name=name,
@@ -1250,7 +1253,7 @@ def render_multi_period_view(data):
     st.markdown(
         f'<div style="font-size:9px;color:#B0B7C3;margin-top:10px;padding-left:4px;">'
         f'Yahoo Finance · As of {as_of.strftime("%b %d, %Y")} · '
-        f'SW Index = simple avg return across software universe'
+        f'HC Index = simple avg return across healthcare universe'
         f'{unavail_note}</div>',
         unsafe_allow_html=True,
     )
@@ -1402,10 +1405,13 @@ def _render_stat_cards(data, change_col):
 # ── Compact detail table helpers ──────────────────────────────────────────────
 
 _DETAIL_CAT_ABBREV = {
-    "Horizontal SW":  ("Horiz", "#29335C"),
-    "Vertical SW":    ("Vert",  "#7CEA9C"),
-    "Infrastructure": ("Infra", "#F3A712"),
-    "Cybersecurity":  ("Cyber", "#DB2B39"),
+    "Pharma":          ("Pharma",  "#2563EB"),
+    "Consumer Health": ("CH",      "#059669"),
+    "MedTech":         ("MedTech", "#DC2626"),
+    "Life Sci Tools":  ("LST",     "#7C3AED"),
+    "Services":        ("Svcs",    "#F59E0B"),
+    "CDMOs":           ("CDMO",    "#EA580C"),
+    "Health Tech":     ("HCIT",    "#0891B2"),
 }
 
 _DETAIL_CSS = """
@@ -1730,7 +1736,7 @@ st.markdown(
     f'<div style="font-size:30px;font-weight:800;color:#111827;margin-bottom:4px;">'
     f'Winners &amp; Losers</div>'
     f'<div style="font-size:14px;color:#6B7280;font-weight:500;">'
-    f'Biggest movers across the software universe{_date_suffix}</div>'
+    f'Biggest movers across the healthcare universe{_date_suffix}</div>'
     f'</div>',
     unsafe_allow_html=True,
 )

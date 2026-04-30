@@ -194,7 +194,7 @@ def load_overrides(excel_path):
         return {}
 
     # Only read our known segment override sheets
-    OVERRIDE_SHEETS = {"Horizontal SW", "Vertical SW", "Infrastructure", "Cybersecurity"}
+    OVERRIDE_SHEETS = {"Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"}
 
     try:
         overrides = {}

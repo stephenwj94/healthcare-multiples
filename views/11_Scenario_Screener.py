@@ -1,6 +1,6 @@
 """
 pages/drafts/scenario_screener.py — Scenario Screener
-Multi-condition filter engine for the software universe.
+Multi-condition filter engine for the healthcare universe.
 Up to 6 filter rows (metric / operator / value), 5 preset screens,
 results as count + comps table + optional scatter.
 
@@ -64,7 +64,7 @@ st.markdown("""
 st.markdown(
     '<div style="font-size:22px;font-weight:700;color:#111827;margin-bottom:2px;">Scenario Screener</div>'
     '<div style="font-size:12px;color:#94A3B8;margin-bottom:16px;">'
-    'Filter the software universe by up to 6 conditions</div>',
+    'Filter the healthcare universe by up to 6 conditions</div>',
     unsafe_allow_html=True,
 )
 

@@ -984,11 +984,14 @@ def build_migration_bar_chart(df_delta, y_col, y_label, top_n=20):
 # ── Segment summary boxes ─────────────────────────────────────────────────────
 
 _SEG_META = [
-    {"label": "All",            "short": "All",      "color": "#475569", "bg": "#F8FAFC", "border": "#E2E8F0"},
-    {"label": "Horizontal SW",  "short": "Horiz SW", "color": "#29335C", "bg": "#ECEEF6", "border": "#A3ABD0"},
-    {"label": "Vertical SW",    "short": "Vert SW",  "color": "#1D6A40", "bg": "#EDFAF3", "border": "#7CEA9C"},
-    {"label": "Infrastructure", "short": "Infra",    "color": "#A87000", "bg": "#FEF9E7", "border": "#F3A712"},
-    {"label": "Cybersecurity",  "short": "Cyber",    "color": "#DB2B39", "bg": "#FDEDEF", "border": "#F4B0B5"},
+    {"label": "All",             "short": "All",     "color": "#475569", "bg": "#F8FAFC", "border": "#E2E8F0"},
+    {"label": "Pharma",          "short": "Pharma",  "color": "#1D4ED8", "bg": "#E9EFFC", "border": "#1D4ED8"},
+    {"label": "Consumer Health", "short": "CH",      "color": "#047857", "bg": "#E6F4EE", "border": "#047857"},
+    {"label": "MedTech",         "short": "MedTech", "color": "#B91C1C", "bg": "#FCEAEA", "border": "#B91C1C"},
+    {"label": "Life Sci Tools",  "short": "LST",     "color": "#6D28D9", "bg": "#F1EAFB", "border": "#6D28D9"},
+    {"label": "Services",        "short": "Svcs",    "color": "#B45309", "bg": "#FEF3E2", "border": "#B45309"},
+    {"label": "CDMOs",           "short": "CDMO",    "color": "#C2410C", "bg": "#FDECE0", "border": "#C2410C"},
+    {"label": "Health Tech",     "short": "HCIT",    "color": "#0E7490", "bg": "#E2F1F5", "border": "#0E7490"},
 ]
 
 
@@ -1106,10 +1109,13 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
     has_growth_then = df_s[f"{x_col}_then"].notna().any()
 
     _SEG_COLORS = {
-        "Horizontal Software": "#29335C", "Horizontal SW": "#29335C",
-        "Vertical Software":   "#7CEA9C", "Vertical SW":   "#7CEA9C",
-        "Infrastructure":      "#F3A712",
-        "Cybersecurity":       "#DB2B39",
+        "Pharma":          "#2563EB",
+        "Consumer Health": "#059669",
+        "MedTech":         "#DC2626",
+        "Life Sci Tools":  "#7C3AED",
+        "Services":        "#F59E0B",
+        "CDMOs":           "#EA580C",
+        "Health Tech":     "#0891B2",
     }
     _TH_S = (
         "background:#F9FAFB;color:#6B7280;font-size:9px;text-transform:uppercase;"
@@ -1684,7 +1690,7 @@ with col2:
 with col3:
     x_axis_label = st.selectbox("X-AXIS (FUNDAMENTAL)", list(X_AXIS_MAP.keys()), index=0)
 with col4:
-    cat_all = ["Horizontal SW", "Vertical SW", "Infrastructure", "Cybersecurity"]
+    cat_all = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
     category_filter = st.multiselect("CATEGORY", cat_all, default=cat_all)
 with col5:
     _tev_all = list(TEV_BANDS.keys())

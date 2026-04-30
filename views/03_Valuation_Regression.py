@@ -136,7 +136,7 @@ st.markdown(
     '<div style="font-size:22px;font-weight:700;color:#111827;margin-bottom:2px;">'
     "Valuation Regression</div>"
     '<div style="font-size:12px;color:#94A3B8;margin-bottom:16px;">'
-    "EV multiple trends and valuation vs. performance scatter across the software universe</div>",
+    "EV multiple trends and valuation vs. performance scatter across the healthcare universe</div>",
     unsafe_allow_html=True,
 )
 
@@ -771,7 +771,7 @@ def _render_scatter_tab(all_data, tab_key):
         st.caption("No valuation vs. performance data available.")
         return
 
-    all_cats = ["Horizontal SW", "Vertical SW", "Infrastructure", "Cybersecurity"]
+    all_cats = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
     with r1c1:
         sel_cats = st.multiselect(
             "CATEGORY",
@@ -942,7 +942,7 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
         '<div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:4px;">'
         "What's Driving Multiples</div>"
         '<div style="font-size:12px;color:#94A3B8;margin-bottom:16px;">'
-        "How much of the variation in software multiples is explained by growth, "
+        "How much of the variation in healthcare multiples is explained by growth, "
         "margins, and profitability — and what's left to narrative and sentiment.</div>",
         unsafe_allow_html=True,
     )
@@ -950,7 +950,7 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
 
     # ── Filters ───────────────────────────────────────────────────────────────
     f1, f2, f3, f4 = st.columns([2, 2, 2, 1])
-    all_cats = ["Horizontal SW", "Vertical SW", "Infrastructure", "Cybersecurity"]
+    all_cats = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
     with f1:
         sel_cats = st.multiselect(
             "CATEGORY", options=all_cats, default=all_cats,
