@@ -244,6 +244,8 @@ pg = st.navigation({
     "Explore": [
         st.Page("views/11_Scenario_Screener.py",     title="Scenario Screener",     icon=":material/filter_alt:"),
         st.Page("views/12_Comp_Set_Builder.py",      title="Comp Set Builder",      icon=":material/group_work:"),
+        st.Page("views/13_Company.py",               title="Company",               icon=":material/account_circle:"),
+        st.Page("views/14_News.py",                  title="News & Earnings",       icon=":material/newspaper:"),
     ],
 })
 

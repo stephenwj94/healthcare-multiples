@@ -327,14 +327,17 @@ def _validate_metrics(metrics_dict, ticker):
     return metrics_dict
 
 
-def compute_all_metrics(raw_data, company_info, fmp_metrics=None):
+def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metrics=None):
     """
     Compute all derived metrics from raw yfinance data, optionally
-    enhanced with FMP data.
+    enhanced with FactSet (highest priority) and/or FMP data.
+
+    Source priority for each field: FactSet > FMP > yfinance > computed.
 
     raw_data: dict with keys from yf_fetcher
     company_info: dict from company_registry
     fmp_metrics: optional dict from fmp_fetcher.parse_fmp_data()
+    factset_metrics: optional dict from factset_rest.parse_factset_data()
 
     Returns: dict of all metric columns for company_snapshots table
     """
@@ -343,6 +346,7 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None):
     growth = raw_data.get("growth", {})
     price_hist = raw_data.get("price_history")
     fmp = fmp_metrics or {}
+    fs = factset_metrics or {}
 
     # Load manual overrides if available
     try:
@@ -351,52 +355,60 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None):
     except ImportError:
         overrides = {}
 
-    # Helper: prefer FMP > yfinance (overrides applied after FX conversion)
-    def prefer(fmp_val, yf_val):
-        return fmp_val if fmp_val is not None else yf_val
+    # Helper: returns first non-None across (FactSet, FMP, yfinance) priority order.
+    def prefer(*vals):
+        for v in vals:
+            if v is not None:
+                return v
+        return None
 
-    # Raw values — FMP profile works for all tickers (market cap, price)
+    # Raw values — FactSet doesn't return market data (prices/shares were fundamentals-only),
+    # so market cap / price come from FMP/yfinance. FactSet does provide diluted share count.
     market_cap = prefer(fmp.get("market_cap"), info.get("marketCap"))
     current_price = prefer(
         fmp.get("current_price"),
         info.get("currentPrice") or info.get("regularMarketPrice"),
     )
     high_52wk = prefer(fmp.get("fifty_two_week_high"), info.get("fiftyTwoWeekHigh"))
-    total_debt = prefer(fmp.get("total_debt"), info.get("totalDebt"))
-    total_cash = prefer(fmp.get("total_cash"), info.get("totalCash"))
-    shares = prefer(fmp.get("shares_outstanding"), info.get("sharesOutstanding"))
-    currency = fmp.get("currency") or info.get("currency", "USD")
+    total_debt = prefer(fs.get("total_debt"), fmp.get("total_debt"), info.get("totalDebt"))
+    total_cash = prefer(fs.get("total_cash"), fmp.get("total_cash"), info.get("totalCash"))
+    shares = prefer(fs.get("shares_outstanding"), fmp.get("shares_outstanding"), info.get("sharesOutstanding"))
+    currency = fs.get("currency") or fmp.get("currency") or info.get("currency", "USD")
 
-    # EV: prefer FMP key-metrics-ttm > yfinance > calculate
+    # EV: FactSet doesn't return EV directly; prefer FMP key-metrics-ttm > yfinance > calculate.
     ev = prefer(fmp.get("enterprise_value"), info.get("enterpriseValue"))
     if not ev and market_cap:
         ev = calc_tev(market_cap, total_debt, total_cash)
 
-    # Margins: prefer FMP ratios-ttm, then yfinance info
-    gross_margin = prefer(fmp.get("gross_margin"), info.get("grossMargins"))
-    ebitda_margin = prefer(fmp.get("ebitda_margin"), info.get("ebitdaMargins"))
+    # Margins: FactSet computes from FY GP/EBITDA over Sales; FMP ratios-ttm; yfinance info.
+    gross_margin = prefer(fs.get("gross_margin"), fmp.get("gross_margin"), info.get("grossMargins"))
+    ebitda_margin = prefer(fs.get("ebitda_margin"), fmp.get("ebitda_margin"), info.get("ebitdaMargins"))
 
-    # LTM financials: prefer FMP income statement, then yfinance
-    ltm_revenue = prefer(fmp.get("ltm_revenue"), info.get("totalRevenue"))
-    ltm_gross_profit = prefer(fmp.get("ltm_gross_profit"), info.get("grossProfits"))
-    ltm_ebitda = prefer(fmp.get("ltm_ebitda"), info.get("ebitda"))
+    # LTM financials
+    ltm_revenue = prefer(fs.get("ltm_revenue"), fmp.get("ltm_revenue"), info.get("totalRevenue"))
+    ltm_gross_profit = prefer(fs.get("ltm_gross_profit"), fmp.get("ltm_gross_profit"), info.get("grossProfits"))
+    ltm_ebitda = prefer(fs.get("ltm_ebitda"), fmp.get("ltm_ebitda"), info.get("ebitda"))
 
-    # Estimates: prefer override > FMP analyst-estimates > yfinance
-    current_fy_rev_est = prefer(fmp.get("current_fy_rev_est"), estimates.get("current_fy_rev"))
-    next_fy_rev_est = prefer(fmp.get("next_fy_rev_est"), estimates.get("next_fy_rev"))
-    current_fy_rev_growth = estimates.get("current_fy_growth")
-    next_fy_rev_growth = estimates.get("next_fy_growth")
-    five_year_growth = growth.get("five_year")
+    # Estimates
+    current_fy_rev_est = prefer(fs.get("current_fy_rev_est"), fmp.get("current_fy_rev_est"), estimates.get("current_fy_rev"))
+    next_fy_rev_est = prefer(fs.get("next_fy_rev_est"), fmp.get("next_fy_rev_est"), estimates.get("next_fy_rev"))
+    current_fy_rev_growth = prefer(fs.get("current_fy_rev_growth"), estimates.get("current_fy_growth"))
+    next_fy_rev_growth = prefer(fs.get("next_fy_rev_growth"), estimates.get("next_fy_growth"))
+    five_year_growth = prefer(fs.get("five_year_growth_rate"), growth.get("five_year"))
 
-    # EBITDA estimates: FMP analyst-estimates only (yfinance doesn't provide these)
-    current_fy_ebitda_est = fmp.get("current_fy_ebitda_est")
-    next_fy_ebitda_est = fmp.get("next_fy_ebitda_est")
+    # EBITDA estimates
+    current_fy_ebitda_est = prefer(fs.get("current_fy_ebitda_est"), fmp.get("current_fy_ebitda_est"))
+    next_fy_ebitda_est = prefer(fs.get("next_fy_ebitda_est"), fmp.get("next_fy_ebitda_est"))
 
-    # Track which source contributed the most
-    data_source = "yfinance"
+    # Track which sources contributed
+    fs_fields_used = sum(1 for k, v in fs.items() if v is not None and k not in {"data_source", "currency"})
     fmp_fields_used = sum(1 for v in fmp.values() if v is not None)
-    if fmp_fields_used >= 3:
+    if fs_fields_used >= 3:
+        data_source = "factset+yfinance"
+    elif fmp_fields_used >= 3:
         data_source = "fmp+yfinance"
+    else:
+        data_source = "yfinance"
 
     # FY end month
     fy_end = company_info.get("fy_end_month", 12)
@@ -409,9 +421,16 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None):
             fy_end = 12
 
     # --- FX CONVERSION ---
-    # Detect if financials are in a non-USD currency and convert
+    # Detect if financials are in a non-USD currency and convert.
+    # FactSet returns the actual reporting currency on each row — prefer it when
+    # FactSet contributed financials (its currency is the most authoritative
+    # signal because it comes from the financial statement, not yfinance metadata).
     from fetcher.ticker_utils import detect_financial_currency
-    financial_currency = detect_financial_currency(info, company_info)
+    fs_currency = fs.get("currency")
+    if fs_currency and fs_currency not in (None, "", "LOCAL") and fs_fields_used >= 3:
+        financial_currency = fs_currency
+    else:
+        financial_currency = detect_financial_currency(info, company_info)
     trading_currency = info.get("currency") or fmp.get("currency") or "USD"
 
     if financial_currency != "USD" or trading_currency != "USD":

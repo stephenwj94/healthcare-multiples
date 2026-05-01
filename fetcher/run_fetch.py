@@ -12,8 +12,18 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import DB_PATH, FETCH_DELAY_SECONDS, FMP_API_KEY, USE_FMP, EXCEL_OVERRIDE_PATH
+from config.settings import (
+    DB_PATH,
+    FETCH_DELAY_SECONDS,
+    FMP_API_KEY,
+    USE_FMP,
+    EXCEL_OVERRIDE_PATH,
+    FACTSET_USERNAME_SERIAL,
+    FACTSET_API_KEY,
+    USE_FACTSET,
+)
 from config.company_registry import COMPANY_REGISTRY
+from config.factset_registry import display_to_factset
 from fetcher.db_manager import DBManager
 from fetcher.yf_fetcher import fetch_company_data
 from fetcher.calculators import compute_all_metrics
@@ -56,9 +66,17 @@ def run_fetch(tickers=None):
     fmp_available = USE_FMP
     if fmp_available:
         from fetcher.fmp_fetcher import fetch_company_data_fmp, parse_fmp_data
-        logger.info(f"FMP API key detected — using hybrid FMP + yfinance mode")
+        logger.info(f"FMP API key detected — FMP enabled")
     else:
-        logger.info("No FMP API key — using yfinance only")
+        logger.info("No FMP API key — FMP disabled")
+
+    # Conditionally import FactSet fetcher
+    factset_available = USE_FACTSET
+    if factset_available:
+        from fetcher.factset_rest import fetch_company_data_factset, parse_factset_data
+        logger.info("FactSet credentials detected — using FactSet > FMP > yfinance hybrid")
+    else:
+        logger.info("No FactSet credentials — falling back to FMP/yfinance")
 
     registry = COMPANY_REGISTRY
     if tickers:
@@ -69,6 +87,7 @@ def run_fetch(tickers=None):
     errors = []
     today = date.today()
     fmp_hit_count = 0
+    factset_hit_count = 0
 
     logger.info(f"Starting fetch for {total} companies...")
     start_time = datetime.now()
@@ -80,7 +99,30 @@ def run_fetch(tickers=None):
         try:
             logger.info(f"[{i}/{total}] Fetching {ticker} ({yahoo_ticker})...")
 
-            # Step 1: FMP data (if available)
+            # Step 1: FactSet data (highest priority — fundamentals + estimates)
+            factset_metrics = None
+            if factset_available:
+                try:
+                    fs_id = company.get("factset_id") or display_to_factset(ticker)
+                    fs_raw = fetch_company_data_factset(
+                        ticker,
+                        factset_id=fs_id,
+                        username_serial=FACTSET_USERNAME_SERIAL,
+                        api_key=FACTSET_API_KEY,
+                    )
+                    factset_metrics = parse_factset_data(fs_raw, company)
+                    fs_fields = sum(
+                        1 for k, v in factset_metrics.items()
+                        if v is not None and k not in {"data_source", "currency"}
+                    )
+                    if fs_fields > 0:
+                        factset_hit_count += 1
+                        logger.info(f"  FactSet: {fs_fields} fields populated ({factset_metrics.get('currency')})")
+                except Exception as e:
+                    logger.warning(f"  FactSet failed for {ticker}: {e}")
+                    factset_metrics = None
+
+            # Step 2: FMP data (fallback / market data)
             fmp_metrics = None
             if fmp_available:
                 try:
@@ -97,11 +139,16 @@ def run_fetch(tickers=None):
                     logger.warning(f"  FMP failed for {ticker}: {e}")
                     fmp_metrics = None
 
-            # Step 2: yfinance data (always — provides estimates, growth, price history)
+            # Step 3: yfinance data (always — provides prices, news, history)
             raw_data = fetch_company_data(yahoo_ticker)
 
-            # Step 3: Compute all metrics (FMP + yfinance merged)
-            metrics = compute_all_metrics(raw_data, company, fmp_metrics=fmp_metrics)
+            # Step 4: Compute all metrics (FactSet > FMP > yfinance)
+            metrics = compute_all_metrics(
+                raw_data,
+                company,
+                fmp_metrics=fmp_metrics,
+                factset_metrics=factset_metrics,
+            )
 
             # Store snapshot
             db.upsert_snapshot(ticker, today, metrics)
@@ -150,6 +197,8 @@ def run_fetch(tickers=None):
     logger.info(f"\nFetch complete in {duration:.0f}s")
     logger.info(f"  Success: {success_count}/{total}")
     logger.info(f"  Errors: {len(errors)}/{total}")
+    if factset_available:
+        logger.info(f"  FactSet data used for: {factset_hit_count}/{total} companies")
     if fmp_available:
         logger.info(f"  FMP data used for: {fmp_hit_count}/{total} companies")
     if errors:

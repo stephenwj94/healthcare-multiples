@@ -29,6 +29,7 @@ from components.formatters import (
 )
 from config.settings import SUB_SEGMENT_DISPLAY, EXCEL_OVERRIDE_PATH
 from fetcher.excel_override import load_overrides, apply_overrides
+from components.logos import logo_img_tag
 
 # ── Column definitions ────────────────────────────────────────────────────────
 # (header_label, df_key, min_width_px, is_sticky, text_align)
@@ -575,10 +576,19 @@ def _render_cell(key, val):
         )
     if key == "ticker":
         safe = _html_lib.escape(str(val or ""))
-        href = f"https://finance.yahoo.com/quote/{safe}"
+        logo = logo_img_tag(str(val or ""), size=14)
+        href = f"/Company?ticker={safe}"
+        # Logo + ticker text in a single inline-flex link so they stay together,
+        # and clicking either piece routes to the in-app Company Profile page.
+        logo_span = (
+            f'<span style="display:inline-flex;align-items:center;'
+            f'width:14px;height:14px;margin-right:4px;flex-shrink:0;">{logo}</span>'
+            if logo else ""
+        )
         return (
-            f'<a class="ct-tkr" href="{href}" target="_blank" '
-            f'rel="noopener noreferrer">{safe}</a>'
+            f'<a class="ct-tkr" href="{href}" target="_self" '
+            f'style="display:inline-flex;align-items:center;text-decoration:none;">'
+            f'{logo_span}<span>{safe}</span></a>'
         )
     if key in ("mkt_cap_m", "tev_m"):
         return _cell_dollar_m(val)
@@ -689,6 +699,13 @@ def _data_row_html(row_dict, idx, cfg):
         # Append M&A flag star to company name cell
         if key == "name" and row_dict.get("ticker") in _MA_NOTES:
             content += '<sup style="color:#F59E0B;font-size:9px;font-weight:700;margin-left:2px">*</sup>'
+        # Wrap company name in link to the in-app Company Profile page
+        if key == "name" and row_dict.get("ticker"):
+            t = _html_lib.escape(str(row_dict["ticker"]))
+            content = (
+                f'<a href="/Company?ticker={t}" target="_self" '
+                f'style="text-decoration:none;color:inherit;">{content}</a>'
+            )
         cells.append(
             f'<td class="ct-td{sticky_cls}{align_cls}{gs_cls}{ltm_cls}" '
             f'data-sort="{sort_v}" style="{left_style}">'
