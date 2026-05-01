@@ -43,10 +43,21 @@ section[data-testid="stSidebar"] {
     opacity: 1 !important;
 }
 
-/* ── Sidebar shell — dark ── */
+/* ── Sidebar shell — dark control panel ── */
 section[data-testid="stSidebar"] {
-    background-color: #111827 !important;
+    background: linear-gradient(180deg, #0F172A 0%, #111827 60%, #0B1220 100%) !important;
     border-right: 1px solid #1F2937 !important;
+    box-shadow: inset -1px 0 0 rgba(255,255,255,0.02);
+}
+section[data-testid="stSidebar"]::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, #2563EB 0%, #7C3AED 50%, #059669 100%);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 5;
 }
 
 /* ── Default text ── */
@@ -131,19 +142,39 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
 </style>
 """, unsafe_allow_html=True)
 
-    # ── Wordmark ───────────────────────────────────────────────────────────────
+    # ── Brand header — sits at the top of the sidebar ──────────────────────────
+    brand_svg = (
+        "<svg width='26' height='26' viewBox='0 0 26 26' xmlns='http://www.w3.org/2000/svg' "
+        "style='flex-shrink:0;'>"
+        "<defs>"
+        "<linearGradient id='pmrBars' x1='0' y1='0' x2='1' y2='1'>"
+        "<stop offset='0%' stop-color='#3B82F6'/>"
+        "<stop offset='100%' stop-color='#7C3AED'/>"
+        "</linearGradient>"
+        "</defs>"
+        "<rect x='2'  y='14' width='4' height='10' rx='1' fill='url(#pmrBars)' opacity='0.55'/>"
+        "<rect x='8'  y='9'  width='4' height='15' rx='1' fill='url(#pmrBars)' opacity='0.75'/>"
+        "<rect x='14' y='4'  width='4' height='20' rx='1' fill='url(#pmrBars)'/>"
+        "<rect x='20' y='10' width='4' height='14' rx='1' fill='#10B981' opacity='0.85'/>"
+        "</svg>"
+    )
+
     st.sidebar.markdown(
-        "<div style='padding:4px 0 14px 0;'>"
+        "<div style='display:flex;align-items:center;gap:10px;"
+        "padding:6px 0 14px 0;margin-bottom:10px;"
+        "border-bottom:1px solid #1F2937;'>"
+        f"{brand_svg}"
+        "<div style='line-height:1.2;'>"
         "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
-        "letter-spacing:0.12em;color:#3B82F6;margin-bottom:6px;'>Healthcare Multiples</div>"
-        "<div style='font-size:15px;font-weight:600;color:#F1F5F9;line-height:1.4;'>"
-        "Market Screening<br>"
-        "<span style='color:#4B5563;font-weight:400;font-size:13px;'>Dashboard</span>"
+        "letter-spacing:0.14em;color:#3B82F6;margin-bottom:3px;'>Healthcare Multiples</div>"
+        "<div style='font-size:14px;font-weight:600;color:#F1F5F9;'>"
+        "Market Screening</div>"
+        "<div style='font-size:10.5px;color:#64748B;font-weight:500;margin-top:2px;"
+        "letter-spacing:0.02em;'>Permira &middot; Healthcare Investments</div>"
         "</div>"
         "</div>",
         unsafe_allow_html=True,
     )
-    st.sidebar.divider()
 
     # ── Last updated ───────────────────────────────────────────────────────────
     db = DBManager(DB_PATH)

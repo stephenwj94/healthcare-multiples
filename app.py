@@ -21,31 +21,61 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
-.stApp { background-color: #FAFBFC !important; }
+.stApp { background-color: #FBFAF6 !important; }
 .main .block-container {
-    background-color: #FAFBFC !important;
+    background-color: #FBFAF6 !important;
     max-width: 100% !important;
-    padding-top: 1rem !important;
+    padding-top: 1.25rem !important;
     padding-left: 1.5rem !important;
     padding-right: 1.5rem !important;
     padding-bottom: 1rem !important;
     color: #111827 !important;
 }
-/* Tighten h1 title top margin so it sits closer to the page top */
+
+/* ── Brand strip — thin gradient bar pinned to the very top ── */
+.stApp::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2563EB 0%, #7C3AED 50%, #059669 100%);
+    z-index: 999999;
+    pointer-events: none;
+}
+
+/* Tighten h1 title top margin and refine type scale */
 h1 {
     margin-top: 0 !important;
     padding-top: 0 !important;
+    font-size: 28px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+    line-height: 1.15 !important;
 }
 
 /* ── Headings ── */
 h1, h2, h3, h4, h5, h6 { color: #111827 !important; }
-h4 {
-    font-size: 15px !important;
+h2 {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.015em !important;
+}
+h3 {
+    font-size: 17px !important;
     font-weight: 600 !important;
-    letter-spacing: 0.3px !important;
-    border-left: 3px solid #3B82F6 !important;
+    letter-spacing: -0.01em !important;
+}
+h4 {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.2px !important;
+    border-left: 2px solid rgba(59, 130, 246, 0.7) !important;
     padding-left: 10px !important;
-    margin-top: 1.5rem !important;
+    margin-top: 1.75rem !important;
+    padding-top: 0.4rem !important;
+    border-top: 1px solid rgba(0,0,0,0.04) !important;
     color: #374151 !important;
 }
 
@@ -96,13 +126,29 @@ div[data-testid="stDataFrame"] tr:hover td {
     background-color: #EFF6FF !important;
 }
 
-/* ── Metric cards ── */
+/* ── Metric cards — subtle elevation + segment accent ── */
 div[data-testid="stMetric"] {
     background-color: #FFFFFF;
     border-radius: 10px;
-    padding: 12px 16px;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    padding: 16px 18px 14px 18px;
+    border: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04);
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+div[data-testid="stMetric"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #1D4ED8 0%, rgba(29, 78, 216, 0.35) 100%);
+    opacity: 0.85;
+}
+div[data-testid="stMetric"]:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.05);
 }
 div[data-testid="stMetric"] label {
     font-size: 11px !important;
@@ -114,12 +160,13 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
     font-size: 22px !important;
     font-weight: 700 !important;
     color: #111827 !important;
+    letter-spacing: -0.01em !important;
 }
 
 /* ── Dividers ── */
 hr {
-    border-color: #E5E7EB !important;
-    margin: 1.5rem 0 !important;
+    border-color: rgba(0,0,0,0.06) !important;
+    margin: 1.75rem 0 !important;
 }
 
 /* ── Captions ── */
@@ -143,6 +190,11 @@ div[data-testid="stCaptionContainer"] p,
     border-bottom: 2px solid transparent !important;
     padding: 10px 20px !important;
     margin-right: 4px !important;
+    transition: all 0.15s ease !important;
+}
+.stTabs [data-baseweb="tab"]:hover, button[role="tab"]:hover {
+    color: #4B5563 !important;
+    border-bottom-color: rgba(59, 130, 246, 0.25) !important;
 }
 .stTabs [aria-selected="true"], button[role="tab"][aria-selected="true"] {
     color: #111827 !important;
@@ -166,10 +218,19 @@ div[data-testid="stRadio"] label {
     border: 1px solid #E5E7EB !important;
     color: #374151 !important;
     border-radius: 6px !important;
+    transition: all 0.15s ease !important;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.02) !important;
 }
 .stButton button:hover {
-    border-color: #D1D5DB !important;
-    background: #F9FAFB !important;
+    border-color: #C7D2FE !important;
+    background: #FFFFFF !important;
+    color: #1D4ED8 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 10px rgba(29, 78, 216, 0.10), 0 1px 2px rgba(0,0,0,0.04) !important;
+}
+.stButton button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
 }
 
 /* ── Spinner ── */

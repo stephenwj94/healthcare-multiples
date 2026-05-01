@@ -92,28 +92,40 @@ logo_html = (
 
 st.markdown(
     f"""
-<div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">
-  {logo_html}
-  <div>
-    <div style="font-size:24px;font-weight:700;color:#111827;line-height:1.1;">
-      {snapshot.get("name", company["name"])}
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
-      <span style="font-size:14px;font-weight:600;color:#1D4ED8;
-                   font-family:'Roboto Mono',monospace;">{ticker}</span>
-      <span style="background:{badge_bg};color:{badge_fg};
-                   padding:2px 8px;border-radius:4px;font-size:11px;
-                   font-weight:600;">{seg_short}</span>
-      {f'<span style="font-size:12px;color:#6B7280;">{sub_seg_label}</span>' if sub_seg_label else ""}
-      <span style="font-size:12px;color:#9CA3AF;">{company.get("country") or ""}</span>
+<div style="position:relative;padding:24px 24px 24px 24px;margin:0 0 28px 0;
+            background:linear-gradient(180deg, #FFFFFF 0%, #FBFAF6 100%);
+            border:1px solid rgba(0,0,0,0.05);border-radius:12px;
+            box-shadow:0 1px 2px rgba(0,0,0,0.03);overflow:hidden;">
+  <div style="position:absolute;top:0;left:0;right:0;height:2px;
+              background:linear-gradient(90deg, {badge_fg} 0%, rgba(124,58,237,0.6) 50%, transparent 100%);"></div>
+  <div style="display:flex;align-items:center;gap:18px;">
+    {logo_html}
+    <div style="flex:1;">
+      <div style="font-size:26px;font-weight:700;color:#0F172A;line-height:1.15;
+                  letter-spacing:-0.02em;">
+        {snapshot.get("name", company["name"])}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:700;color:#1D4ED8;
+                     font-family:'Roboto Mono',ui-monospace,monospace;
+                     letter-spacing:0.02em;">{ticker}</span>
+        <span style="color:#D1D5DB;">&bull;</span>
+        <span style="background:{badge_bg};color:{badge_fg};
+                     padding:3px 9px;border-radius:4px;font-size:11px;
+                     font-weight:600;letter-spacing:0.02em;">{seg_short}</span>
+        {f'<span style="font-size:12px;color:#6B7280;">{sub_seg_label}</span>' if sub_seg_label else ""}
+        <span style="font-size:12px;color:#9CA3AF;">{company.get("country") or ""}</span>
+      </div>
     </div>
   </div>
+  <div style="position:absolute;bottom:0;left:24px;right:24px;height:1px;
+              background:linear-gradient(90deg, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.02) 60%, transparent 100%);"></div>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-# ── KPI strip ─────────────────────────────────────────────────────────────────
+# ── KPI strip — grouped into "Valuation" + "Growth & Quality" clusters ────────
 def _fmt_dollars_b(x):
     if x is None:
         return "—"
@@ -132,13 +144,28 @@ def _fmt_pct(x):
     return f"{x*100:.1f}%"
 
 
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-k1.metric("Market Cap", _fmt_dollars_b(snapshot.get("market_cap")))
-k2.metric("TEV",        _fmt_dollars_b(snapshot.get("enterprise_value")))
-k3.metric("NTM EV/Rev", _fmt_mult(snapshot.get("ntm_tev_rev")))
-k4.metric("NTM EV/EBITDA", _fmt_mult(snapshot.get("ntm_tev_ebitda")))
-k5.metric("NTM Rev Growth", _fmt_pct(snapshot.get("ntm_revenue_growth")))
-k6.metric("EBITDA Margin", _fmt_pct(snapshot.get("ebitda_margin")))
+def _cluster_label(text: str):
+    st.markdown(
+        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+        f"letter-spacing:0.12em;color:#64748B;margin:0 0 8px 2px;'>"
+        f"{text}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+_cluster_label("Valuation")
+v1, v2, v3 = st.columns(3)
+v1.metric("TEV",            _fmt_dollars_b(snapshot.get("enterprise_value")))
+v2.metric("NTM EV/Rev",     _fmt_mult(snapshot.get("ntm_tev_rev")))
+v3.metric("NTM EV/EBITDA",  _fmt_mult(snapshot.get("ntm_tev_ebitda")))
+
+st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+_cluster_label("Growth & Quality")
+g1, g2, g3 = st.columns(3)
+g1.metric("Market Cap",     _fmt_dollars_b(snapshot.get("market_cap")))
+g2.metric("NTM Rev Growth", _fmt_pct(snapshot.get("ntm_revenue_growth")))
+g3.metric("EBITDA Margin",  _fmt_pct(snapshot.get("ebitda_margin")))
 
 
 # ── Price chart (1Y, fetched live) ────────────────────────────────────────────
@@ -197,21 +224,99 @@ mult_rows = [
     ("LTM EV/EBITDA",  "ltm_tev_ebitda"),
 ]
 
-mult_df = pd.DataFrame([
-    {
-        "Multiple": label,
-        f"{ticker}": _fmt_mult(snapshot.get(key)),
-        f"{seg_short} Median": _fmt_mult(_seg_median(segment_peers, key)),
-        "vs. Median": (
-            f"{((snapshot.get(key) or 0) / m - 1)*100:+.0f}%"
-            if (m := _seg_median(segment_peers, key)) and snapshot.get(key)
-            else "—"
-        ),
-    }
-    for label, key in mult_rows
-])
-st.dataframe(mult_df, use_container_width=True, hide_index=True)
-st.caption(f"Median computed across {peer_count} {seg_short} companies.")
+
+def _seg_quartile(rows, key: str, q: float):
+    vals = sorted([r.get(key) for r in rows
+                   if r.get(key) is not None and r.get(key) > 0 and r.get(key) <= 75])
+    if not vals:
+        return None
+    idx = max(0, min(len(vals) - 1, int(q * (len(vals) - 1))))
+    return vals[idx]
+
+
+_logo_for_header = logo_url(ticker, size=64)
+_logo_cell = (
+    f'<img src="{_logo_for_header}" width="20" height="20" '
+    f'style="border-radius:4px;object-fit:contain;border:1px solid #E5E7EB;'
+    f'background:#FFFFFF;padding:2px;vertical-align:middle;margin-right:8px;" '
+    f'onerror="this.style.display=\'none\'" loading="lazy">'
+    if _logo_for_header else ""
+)
+
+rows_html = []
+for label, key in mult_rows:
+    co_val = snapshot.get(key)
+    med_val = _seg_median(segment_peers, key)
+    q25 = _seg_quartile(segment_peers, key, 0.25)
+    q75 = _seg_quartile(segment_peers, key, 0.75)
+
+    # Highlight extreme values (above 75th pct or below 25th pct)
+    co_style = ""
+    if co_val and co_val > 0 and co_val <= 75:
+        if q75 is not None and co_val >= q75:
+            co_style = f"background:{badge_bg};color:{badge_fg};font-weight:700;"
+        elif q25 is not None and co_val <= q25:
+            co_style = f"background:{badge_bg};color:{badge_fg};font-weight:700;"
+
+    if med_val and co_val and med_val > 0 and co_val > 0:
+        delta_pct = (co_val / med_val - 1) * 100
+        if delta_pct >= 0:
+            delta_html = (
+                f'<span style="color:#047857;background:rgba(16,185,129,0.10);'
+                f'padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">'
+                f'+{delta_pct:.0f}%</span>'
+            )
+        else:
+            delta_html = (
+                f'<span style="color:#B91C1C;background:rgba(239,68,68,0.10);'
+                f'padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">'
+                f'{delta_pct:.0f}%</span>'
+            )
+    else:
+        delta_html = '<span style="color:#9CA3AF;">—</span>'
+
+    rows_html.append(
+        f'<tr>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'font-weight:500;color:#374151;">{label}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;font-variant-numeric:tabular-nums;'
+        f'border-radius:4px;{co_style}">{_fmt_mult(co_val)}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;color:#6B7280;font-variant-numeric:tabular-nums;">'
+        f'{_fmt_mult(med_val)}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;">{delta_html}</td>'
+        f'</tr>'
+    )
+
+st.markdown(
+    f'<div style="border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
+    f'overflow:hidden;background:#FFFFFF;'
+    f'box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+    f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    f'<thead><tr style="background:#F9FAFB;">'
+    f'<th style="text-align:left;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">Multiple</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">{_logo_cell}{ticker}</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">{seg_short} Median</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">vs. Median</th>'
+    f'</tr></thead>'
+    f'<tbody>{"".join(rows_html)}</tbody>'
+    f'</table></div>',
+    unsafe_allow_html=True,
+)
+st.caption(
+    f"Median computed across {peer_count} {seg_short} companies. "
+    f"Highlighted cells fall above the 75th or below the 25th percentile of segment peers."
+)
 
 
 # ── Fundamentals card ─────────────────────────────────────────────────────────
@@ -225,6 +330,18 @@ f4.metric("Gross Margin", _fmt_pct(snapshot.get("gross_margin")))
 
 # ── News (yfinance, fetched live) ─────────────────────────────────────────────
 st.markdown("#### Recent News")
+st.markdown(
+    "<style>"
+    ".company-news-item { padding:12px 14px; border-bottom:1px solid #F3F4F6; "
+    "border-radius:6px; transition: background 0.15s ease; margin: 0 -10px; }"
+    ".company-news-item:hover { background:#FAFAF7; }"
+    ".company-news-item a { font-weight:500; color:#111827; "
+    "text-decoration:none; font-size:14px; line-height:1.4; }"
+    ".company-news-item a:hover { color:#1D4ED8; }"
+    ".company-news-meta { color:#9CA3AF; font-size:11px; margin-top:4px; }"
+    "</style>",
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_data(ttl=60 * 30)
@@ -258,11 +375,10 @@ else:
         provider = ((content.get("provider") or {}).get("displayName")
                     or item.get("publisher") or "")
         st.markdown(
-            f'<div style="padding:10px 0;border-bottom:1px solid #F3F4F6;">'
-            f'<a href="{url}" target="_blank" rel="noopener noreferrer" '
-            f'style="font-weight:500;color:#111827;text-decoration:none;font-size:14px;">'
+            f'<div class="company-news-item">'
+            f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
             f'{title}</a>'
-            f'<div style="color:#9CA3AF;font-size:11px;margin-top:2px;">'
+            f'<div class="company-news-meta">'
             f'{provider}{" · " if provider and pub_str else ""}{pub_str}'
             f'</div>'
             f'</div>',

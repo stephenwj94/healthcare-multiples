@@ -6,6 +6,25 @@ Falls back gracefully — returns None for unknown tickers.
 """
 
 # Ticker → company website domain
+# Hand-patched entries for tickers yfinance couldn't resolve (international,
+# acquired-but-still-trading, or low-coverage names). Keep alphabetical so
+# build_logo_domains.py merges cleanly on re-run.
+_MANUAL_DOMAINS: dict[str, str] = {
+    "300347 / 3347": "tigermedgrp.com",
+    "4581":          "taisho.co.jp",
+    "COLO B":        "coloplast.com",
+    "GLB":           "glanbia.com",
+    "INDEGENE":      "indegene.com",
+    "KRKG":          "krka.biz",
+    "LUN":           "lundbeck.com",
+    "MRK GR":        "merckgroup.com",
+    "PDCO":          "pattersoncompanies.com",
+    "SRDX":          "surmodics.com",
+    "SUVENPHAR":     "suven.com",
+    "SXS":           "spectris.com",
+    "VERV":          "vervetx.com",
+}
+
 _TICKER_DOMAINS: dict[str, str] = {
     '000710'      : 'berrygenomics.com',
     '002821'      : 'asymchem.com.cn',
@@ -317,8 +336,12 @@ def logo_url(ticker: str, size: int = 64) -> str | None:
 
     Google's favicon service has near-100% coverage and supports sizes
     up to 256.  We request 2× the display size for retina clarity.
+
+    Lookup order: manual overrides → auto-generated map. Both keyed by
+    upper-cased display ticker.
     """
-    domain = _TICKER_DOMAINS.get(ticker.upper())
+    t = ticker.upper()
+    domain = _MANUAL_DOMAINS.get(t) or _TICKER_DOMAINS.get(t)
     if not domain:
         return None
     return f"https://www.google.com/s2/favicons?domain={domain}&sz={size}"

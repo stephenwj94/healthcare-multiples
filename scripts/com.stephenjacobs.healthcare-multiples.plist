@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stephenjacobs.healthcare-multiples.refresh</string>
+
+    <!-- Run scripts/daily_refresh.sh from the project. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/stephenjacobs/Healthcare comps/scripts/daily_refresh.sh</string>
+    </array>
+
+    <!-- Weekdays at 7:42 AM local time (mirrors the tech-multiples cron). -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>42</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>42</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>42</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>42</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>42</integer>
+        </dict>
+    </array>
+
+    <!-- Run as soon as the load is registered IF the scheduled time has
+         already passed for the day (catches up after laptop wake). -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Capture stdout/stderr to data/refresh.log via the shell script.
+         These are extra logs in case the script never starts. -->
+    <key>StandardOutPath</key>
+    <string>/Users/stephenjacobs/Healthcare comps/data/launchd.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/stephenjacobs/Healthcare comps/data/launchd.stderr.log</string>
+
+    <!-- Working directory for the script. -->
+    <key>WorkingDirectory</key>
+    <string>/Users/stephenjacobs/Healthcare comps</string>
+
+    <!-- Environment — give launchd a sane PATH that includes Homebrew (for git, python). -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
