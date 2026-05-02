@@ -829,8 +829,8 @@ if not _clean_dist.empty:
                    tickfont=dict(size=11, color="#6B7280")),
         yaxis=dict(showgrid=True, gridcolor="#F3F4F6", linecolor="#E5E7EB",
                    tickfont=dict(size=10, color="#9CA3AF"),
-                   title="Number of Companies",
-                   titlefont=dict(size=11, color="#9CA3AF")),
+                   title=dict(text="Number of Companies",
+                              font=dict(size=11, color="#9CA3AF"))),
         bargap=0.15,
     )
     st.plotly_chart(dist_fig, use_container_width=True,
