@@ -25,8 +25,6 @@ from config.color_palette import SEGMENT_COLORS
 from components.sidebar import render_sidebar
 
 # ── Page config ──────────────────────────────────────────────────────────────���
-st.set_page_config(page_title="Valuation Lookback", page_icon=":material/history:", layout="wide")
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');

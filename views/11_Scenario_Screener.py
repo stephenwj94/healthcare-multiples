@@ -26,7 +26,6 @@ from utils.scatter_builder import (
     _FONT_FAM, PLOTLY_BG,
 )
 
-st.set_page_config(page_title="Scenario Screener", page_icon="🔍", layout="wide")
 render_sidebar()
 
 st.markdown("""

@@ -209,10 +209,25 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
         "</svg>"
     )
 
+    # Place brand header in the sidebar — CSS moves it above the nav items
     st.sidebar.markdown(
-        "<div style='display:flex;align-items:center;gap:10px;"
-        "padding:6px 0 14px 0;margin-bottom:10px;"
-        "border-bottom:1px solid #1F2937;'>"
+        "<style>"
+        "/* Make sidebar content a flex container so we can reorder */\n"
+        "section[data-testid='stSidebar'] [data-testid='stSidebarContent'] > div {"
+        "  display: flex; flex-direction: column;"
+        "}\n"
+        "/* Brand header: rendered last in DOM but displayed first via order */\n"
+        "#hc-brand-header {"
+        "  order: -1;"
+        "  display: flex;"
+        "  align-items: center;"
+        "  gap: 10px;"
+        "  padding: 6px 0 14px 0;"
+        "  margin-bottom: 10px;"
+        "  border-bottom: 1px solid #1F2937;"
+        "}"
+        "</style>"
+        "<div id='hc-brand-header'>"
         f"{brand_svg}"
         "<div style='line-height:1.2;'>"
         "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"

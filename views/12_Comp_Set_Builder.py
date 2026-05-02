@@ -46,7 +46,6 @@ from utils.scatter_builder import (
     _FONT_FAM, PLOTLY_BG, PLOTLY_GRID, PLOTLY_TEXT,
 )
 
-st.set_page_config(page_title="Comp Set Builder", page_icon="🧩", layout="wide")
 render_sidebar()
 
 st.markdown("""
