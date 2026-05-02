@@ -192,54 +192,9 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
 </style>
 """, unsafe_allow_html=True)
 
-    # ── Brand header — sits at the top of the sidebar ──────────────────────────
-    brand_svg = (
-        "<svg width='30' height='30' viewBox='0 0 26 26' xmlns='http://www.w3.org/2000/svg' "
-        "style='flex-shrink:0;'>"
-        "<defs>"
-        "<linearGradient id='pmrBars' x1='0' y1='0' x2='1' y2='1'>"
-        "<stop offset='0%' stop-color='#3B82F6'/>"
-        "<stop offset='100%' stop-color='#7C3AED'/>"
-        "</linearGradient>"
-        "</defs>"
-        "<rect x='2'  y='14' width='4' height='10' rx='1' fill='url(#pmrBars)' opacity='0.55'/>"
-        "<rect x='8'  y='9'  width='4' height='15' rx='1' fill='url(#pmrBars)' opacity='0.75'/>"
-        "<rect x='14' y='4'  width='4' height='20' rx='1' fill='url(#pmrBars)'/>"
-        "<rect x='20' y='10' width='4' height='14' rx='1' fill='#10B981' opacity='0.85'/>"
-        "</svg>"
-    )
-
-    # Place brand header in the sidebar — CSS moves it above the nav items
-    st.sidebar.markdown(
-        "<style>"
-        "/* Make sidebar content a flex container so we can reorder */\n"
-        "section[data-testid='stSidebar'] [data-testid='stSidebarContent'] > div {"
-        "  display: flex; flex-direction: column;"
-        "}\n"
-        "/* Brand header: rendered last in DOM but displayed first via order */\n"
-        "#hc-brand-header {"
-        "  order: -1;"
-        "  display: flex;"
-        "  align-items: center;"
-        "  gap: 10px;"
-        "  padding: 6px 0 14px 0;"
-        "  margin-bottom: 10px;"
-        "  border-bottom: 1px solid #1F2937;"
-        "}"
-        "</style>"
-        "<div id='hc-brand-header'>"
-        f"{brand_svg}"
-        "<div style='line-height:1.2;'>"
-        "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
-        "letter-spacing:0.14em;color:#3B82F6;margin-bottom:3px;'>Healthcare Multiples</div>"
-        "<div style='font-size:14px;font-weight:600;color:#F1F5F9;'>"
-        "Market Screening</div>"
-        "</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
     # ── Last updated ───────────────────────────────────────────────────────────
+    # (Brand header is rendered in app.py before st.navigation so it appears
+    #  at the top of the sidebar above the nav items.)
     db = DBManager(DB_PATH)
     try:
         last_fetch = db.get_last_fetch_time()

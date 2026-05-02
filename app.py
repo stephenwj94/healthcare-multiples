@@ -287,6 +287,37 @@ if not st.session_state.get("authenticated"):
             st.error("Incorrect password.")
     st.stop()
 
+# ── Brand header — top of sidebar, above nav ─────────────────────────────────
+_brand_svg = (
+    "<svg width='30' height='30' viewBox='0 0 26 26' xmlns='http://www.w3.org/2000/svg' "
+    "style='flex-shrink:0;'>"
+    "<defs>"
+    "<linearGradient id='pmrBars' x1='0' y1='0' x2='1' y2='1'>"
+    "<stop offset='0%' stop-color='#3B82F6'/>"
+    "<stop offset='100%' stop-color='#7C3AED'/>"
+    "</linearGradient>"
+    "</defs>"
+    "<rect x='2'  y='14' width='4' height='10' rx='1' fill='url(#pmrBars)' opacity='0.55'/>"
+    "<rect x='8'  y='9'  width='4' height='15' rx='1' fill='url(#pmrBars)' opacity='0.75'/>"
+    "<rect x='14' y='4'  width='4' height='20' rx='1' fill='url(#pmrBars)'/>"
+    "<rect x='20' y='10' width='4' height='14' rx='1' fill='#10B981' opacity='0.85'/>"
+    "</svg>"
+)
+st.sidebar.markdown(
+    "<div style='display:flex;align-items:center;gap:10px;"
+    "padding:6px 0 14px 0;margin-bottom:6px;"
+    "border-bottom:1px solid #1F2937;'>"
+    f"{_brand_svg}"
+    "<div style='line-height:1.2;'>"
+    "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+    "letter-spacing:0.14em;color:#3B82F6;margin-bottom:3px;'>Healthcare Multiples</div>"
+    "<div style='font-size:14px;font-weight:600;color:#F1F5F9;'>"
+    "Market Screening</div>"
+    "</div>"
+    "</div>",
+    unsafe_allow_html=True,
+)
+
 pg = st.navigation({
     "Home": [
         st.Page("views/00_Home.py",                    title="Home",                  icon=":material/home:", default=True),
