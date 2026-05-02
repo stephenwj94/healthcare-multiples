@@ -141,6 +141,16 @@ st.markdown(
 # ── Segment filter checkboxes (top of page, filters everything) ──────────────
 seg_keys = list(SEGMENT_DISPLAY.keys())
 seg_labels = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
+# Shorter labels for checkbox pills (fit in equal-width columns)
+_CB_LABELS = {
+    "pharma":          "Pharma",
+    "consumer_health": "Consumer",
+    "medtech":         "MedTech",
+    "life_sci_tools":  "LST/Dx",
+    "services":        "Asset-Light",
+    "cdmo":            "Asset-Heavy",
+    "health_tech":     "Health Tech",
+}
 
 # Segment icons (emoji after the segment name)
 _SEG_ICONS = {
@@ -160,33 +170,36 @@ def _hex_to_rgba(hex_color, alpha):
 
 # CSS: style each checkbox container as a colored pill box with proper alignment
 _pill_css = "<style>\n"
-# Ensure all checkbox columns are equal width and aligned
+# Ensure all columns are equal width, no wrapping, vertically centered
 _pill_css += (
     '/* Equal-width segment columns */\n'
     'div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {\n'
     '  flex: 1 1 0 !important; min-width: 0 !important;\n'
     '}\n'
-    '/* Vertically center checkbox label with the box */\n'
+    '/* Vertically center checkbox label with the box, prevent wrapping */\n'
     'div[data-testid="stCheckbox"] label {\n'
     '  display: flex !important; align-items: center !important;\n'
+    '  white-space: nowrap !important;\n'
     '}\n'
     'div[data-testid="stCheckbox"] label p {\n'
     '  margin: 0 !important; line-height: 1 !important;\n'
+    '  white-space: nowrap !important; font-size: 11px !important;\n'
     '}\n'
 )
 for seg_key in seg_keys:
     color = SEGMENT_COLORS.get(seg_key, "#6B7280")
     bg = _hex_to_rgba(color, 0.08)
     border = _hex_to_rgba(color, 0.35)
-    aria = f"{seg_labels[seg_key]} {_SEG_ICONS.get(seg_key, '')}"
+    cb_label = _CB_LABELS.get(seg_key, seg_labels[seg_key])
+    aria = f"{cb_label} {_SEG_ICONS.get(seg_key, '')}"
     _pill_css += (
-        f'/* {seg_labels[seg_key]} pill */\n'
+        f'/* {cb_label} pill */\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) {{\n'
         f'  background: {bg}; border: 1.5px solid {border}; border-radius: 8px;\n'
         f'  padding: 4px 8px; transition: all 0.15s ease;\n'
         f'}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) label p {{\n'
-        f'  color: {color} !important; font-weight: 600 !important; font-size: 12px !important;\n'
+        f'  color: {color} !important; font-weight: 600 !important; font-size: 11px !important;\n'
         f'}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]):hover {{\n'
         f'  background: {_hex_to_rgba(color, 0.14)}; border-color: {_hex_to_rgba(color, 0.5)};\n'
@@ -202,11 +215,11 @@ _all_cols = st.columns(_n_seg + 1)  # segments + time period selector
 
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
-    label = seg_labels[seg_key]
+    cb_label = _CB_LABELS.get(seg_key, seg_labels[seg_key])
     icon = _SEG_ICONS.get(seg_key, "")
     with _all_cols[i]:
         checked = st.checkbox(
-            f"{label} {icon}", value=True, key=f"ov_seg_{seg_key}",
+            f"{cb_label} {icon}", value=True, key=f"ov_seg_{seg_key}",
         )
         if checked:
             selected_segments.add(seg_key)
