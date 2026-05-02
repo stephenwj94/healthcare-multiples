@@ -135,16 +135,30 @@ st.markdown(
 )
 
 # ── Segment filter checkboxes (top of page, filters everything) ──────────────
-# Build segment color-coded checkboxes
 seg_keys = list(SEGMENT_DISPLAY.keys())
 seg_labels = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
 
-# Use columns for segment checkboxes with colored dots
+# Inject CSS to color each checkbox's label with a colored dot
+_seg_css = "<style>\n"
+for seg_key in seg_keys:
+    color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+    _seg_css += (
+        f'[data-testid="stCheckbox"][data-key="ov_seg_{seg_key}"] label span {{'
+        f'  position: relative; padding-left: 6px;'
+        f'}}\n'
+        f'[data-testid="stCheckbox"][data-key="ov_seg_{seg_key}"] label::before {{'
+        f'  content: ""; display: inline-block; width: 10px; height: 10px;'
+        f'  border-radius: 50%; background: {color}; margin-right: 4px;'
+        f'  vertical-align: middle; flex-shrink: 0;'
+        f'}}\n'
+    )
+_seg_css += "</style>"
+st.markdown(_seg_css, unsafe_allow_html=True)
+
 seg_cols = st.columns(len(seg_keys))
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
     label = seg_labels[seg_key]
-    color = SEGMENT_COLORS.get(seg_key, "#6B7280")
     with seg_cols[i]:
         if st.checkbox(label, value=True, key=f"ov_seg_{seg_key}"):
             selected_segments.add(seg_key)
@@ -306,11 +320,36 @@ filtered_companies = sorted(
     key=lambda c: c["name"],
 )
 
+# Build company list rows for the expandable details inside the card
+_comp_rows = ""
+for c in filtered_companies:
+    _seg = SEGMENT_SHORT.get(c["segment"], c["segment"])
+    _comp_rows += (
+        f'<tr><td style="padding:3px 8px;font-size:11px;color:#374151;">'
+        f'{_html_lib.escape(c["name"])}</td>'
+        f'<td style="padding:3px 8px;font-size:11px;color:#3B82F6;font-weight:600;">'
+        f'{_html_lib.escape(c["ticker"])}</td>'
+        f'<td style="padding:3px 8px;font-size:11px;color:#6B7280;">'
+        f'{_html_lib.escape(_seg)}</td></tr>'
+    )
+
 cards += (
-    '<div class="wl-stat-card">'
+    '<div class="wl-stat-card" style="position:relative;">'
     '<div class="wl-stat-label">Universe</div>'
     f'<div class="wl-stat-value">{universe_count}</div>'
     f'<div class="wl-stat-sub">of {total_universe} total companies</div>'
+    f'<details style="margin-top:10px;">'
+    f'<summary style="font-size:11px;color:#3B82F6;cursor:pointer;font-weight:600;'
+    f'user-select:none;">View all {universe_count} companies</summary>'
+    f'<div style="max-height:300px;overflow-y:auto;margin-top:6px;'
+    f'border-top:1px solid #E5E7EB;padding-top:6px;">'
+    f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;">'
+    f'<thead><tr>'
+    f'<th style="text-align:left;font-size:10px;color:#9CA3AF;padding:2px 8px;font-weight:600;">Company</th>'
+    f'<th style="text-align:left;font-size:10px;color:#9CA3AF;padding:2px 8px;font-weight:600;">Ticker</th>'
+    f'<th style="text-align:left;font-size:10px;color:#9CA3AF;padding:2px 8px;font-weight:600;">Segment</th>'
+    f'</tr></thead><tbody>{_comp_rows}</tbody></table>'
+    f'</div></details>'
     '</div>'
 )
 
@@ -402,15 +441,6 @@ if not returns.empty:
 
 cards += '</div>'
 st.markdown(cards, unsafe_allow_html=True)
-
-# Universe company list (expandable)
-with st.expander(f"View all {universe_count} companies in selected segments"):
-    comp_df = pd.DataFrame([
-        {"Company": c["name"], "Ticker": c["ticker"],
-         "Segment": SEGMENT_SHORT.get(c["segment"], c["segment"])}
-        for c in filtered_companies
-    ])
-    st.dataframe(comp_df, use_container_width=True, hide_index=True, height=400)
 
 
 # ── Segment performance chart ─────────────────────────────────────────────────
