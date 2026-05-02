@@ -2,16 +2,18 @@
 Company Profile — single-company drill-down.
 
 Reads `?ticker=XXX` from query params (set by the comp-table ticker link)
-and renders: logo + name header, KPI strip, price chart, fundamentals,
-multiples vs segment median, and recent news.
+and renders: logo + name header, KPI strip, multi-metric chart, fundamentals,
+multiples vs segment median, operating metrics benchmark, and recent news.
 """
 
 import sys
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
@@ -165,11 +167,17 @@ _cluster_label("Growth & Quality")
 g1, g2, g3 = st.columns(3)
 g1.metric("Market Cap",     _fmt_dollars_b(snapshot.get("market_cap")))
 g2.metric("NTM Rev Growth", _fmt_pct(snapshot.get("ntm_revenue_growth")))
-g3.metric("EBITDA Margin",  _fmt_pct(snapshot.get("ebitda_margin")))
+g3.metric("NTM EBITDA Margin",  _fmt_pct(snapshot.get("ebitda_margin")))
+
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-top:4px;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> FactSet</div>',
+    unsafe_allow_html=True,
+)
 
 
-# ── Price chart with time period selector ────────────────────────────────────
-st.markdown("#### Share Price")
+# ── Multi-metric chart with time period selector ─────────────────────────────
+st.markdown("#### Metrics Over Time")
 
 _period_options = {"1W": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd", "1Y": "1y", "3Y": "3y", "5Y": "5y"}
 _price_cols = st.columns(len(_period_options))
@@ -184,6 +192,26 @@ for i, (label, _) in enumerate(_period_options.items()):
 
 _yf_period = _period_options[_selected_period]
 
+# Metric selector
+_CHART_METRICS = [
+    "Share Price",
+    "NTM Revenue Growth %",
+    "NTM EBITDA Margin %",
+    "NTM EV/Revenue",
+    "NTM EV/EBITDA",
+]
+_default_metrics = ["Share Price"]
+_chart_selected = st.multiselect(
+    "Metrics to display",
+    _CHART_METRICS,
+    default=st.session_state.get("_cp_chart_metrics", _default_metrics),
+    key="_cp_chart_metrics_select",
+)
+if _chart_selected:
+    st.session_state["_cp_chart_metrics"] = _chart_selected
+else:
+    _chart_selected = _default_metrics
+
 
 @st.cache_data(ttl=60 * 30)  # 30-min cache
 def _fetch_price_history(yt: str, period: str = "1y") -> pd.DataFrame:
@@ -194,33 +222,166 @@ def _fetch_price_history(yt: str, period: str = "1y") -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=60 * 30)
+def _fetch_daily_multiples_for_ticker(tkr: str, days_back: int = 1825) -> pd.DataFrame:
+    """Fetch daily multiples for a single ticker from the DB."""
+    try:
+        _db = DBManager(DB_PATH)
+        rows = _db.get_daily_multiples(days_back=days_back)
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return pd.DataFrame()
+        df = df[df["ticker"] == tkr].copy()
+        if df.empty:
+            return pd.DataFrame()
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date")
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+# Map period label to approx days for DB query
+_period_to_days = {"1W": 10, "1M": 35, "3M": 100, "6M": 190, "YTD": 370, "1Y": 370, "3Y": 1100, "5Y": 1830}
+_days_back = _period_to_days.get(_selected_period, 370)
+
 hist = _fetch_price_history(yahoo_ticker, _yf_period)
-if hist.empty:
-    st.info("Price history not available for this ticker right now.")
+dm_df = _fetch_daily_multiples_for_ticker(ticker, _days_back)
+
+# Determine what data we have
+_has_price = not hist.empty and "Share Price" in _chart_selected
+_has_dm = not dm_df.empty
+_non_price_metrics = [m for m in _chart_selected if m != "Share Price"]
+_has_secondary = bool(_non_price_metrics)
+
+if not _chart_selected:
+    st.info("Select at least one metric to display.")
+elif not _has_price and not _has_dm and _non_price_metrics:
+    st.info("No data available for the selected metrics and time period.")
 else:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=hist.index, y=hist["Close"],
-        line=dict(color="#1D4ED8", width=2),
-        hovertemplate="<b>%{x|%b %d, %Y}</b><br>%{y:.2f}<extra></extra>",
-        name="Close",
-    ))
+    # Build the chart
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Color palette for traces
+    _trace_colors = {
+        "Share Price": "#1D4ED8",
+        "NTM Revenue Growth %": "#16A34A",
+        "NTM EBITDA Margin %": "#D97706",
+        "NTM EV/Revenue": "#7C3AED",
+        "NTM EV/EBITDA": "#DC2626",
+    }
+
+    # Map metric names to daily_multiples columns
+    _metric_to_col = {
+        "NTM Revenue Growth %": "ntm_revenue_growth",
+        "NTM EBITDA Margin %": "ebitda_margin",
+        "NTM EV/Revenue": "ntm_tev_rev",
+        "NTM EV/EBITDA": "ntm_tev_ebitda",
+    }
+
+    if _has_price:
+        fig.add_trace(
+            go.Scatter(
+                x=hist.index, y=hist["Close"],
+                line=dict(color=_trace_colors["Share Price"], width=2),
+                hovertemplate="<b>%{x|%b %d, %Y}</b><br>$%{y:.2f}<extra>Share Price</extra>",
+                name="Share Price",
+            ),
+            secondary_y=False,
+        )
+
+    # Add non-price metrics from daily_multiples
+    for metric_name in _non_price_metrics:
+        col = _metric_to_col.get(metric_name)
+        if col and _has_dm and col in dm_df.columns:
+            series = dm_df.dropna(subset=[col])
+            if series.empty:
+                continue
+            y_vals = series[col].copy()
+            # Convert fractional values to percentage for growth/margin
+            if "%" in metric_name:
+                y_vals = y_vals * 100
+                hover_suffix = "%"
+                hover_fmt = ",.1f"
+            else:
+                hover_suffix = "x"
+                hover_fmt = ",.1f"
+            fig.add_trace(
+                go.Scatter(
+                    x=series["date"], y=y_vals,
+                    line=dict(color=_trace_colors.get(metric_name, "#999"), width=2),
+                    hovertemplate=(
+                        f"<b>%{{x|%b %d, %Y}}</b><br>"
+                        f"%{{y:{hover_fmt}}}{hover_suffix}"
+                        f"<extra>{metric_name}</extra>"
+                    ),
+                    name=metric_name,
+                ),
+                secondary_y=True,
+            )
+
+    # Layout
+    _show_legend = len(_chart_selected) > 1
     fig.update_layout(
-        height=320,
+        height=360,
         margin=dict(l=0, r=0, t=10, b=10),
         plot_bgcolor=PLOTLY_BG,
         paper_bgcolor=PLOTLY_BG,
-        showlegend=False,
+        showlegend=_show_legend,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+            font=dict(size=11),
+        ),
         xaxis=dict(showgrid=False, color=PLOTLY_TEXT),
-        yaxis=dict(gridcolor=PLOTLY_GRID, color=PLOTLY_TEXT,
-                   tickformat=",.0f", tickprefix="$"),
         font=dict(family="DM Sans, sans-serif", size=12, color=PLOTLY_TEXT),
     )
+
+    # Left y-axis (price)
+    if _has_price:
+        fig.update_yaxes(
+            gridcolor=PLOTLY_GRID, color=PLOTLY_TEXT,
+            tickformat=",.0f", tickprefix="$",
+            secondary_y=False,
+            title_text="Share Price" if _has_secondary else None,
+        )
+    else:
+        fig.update_yaxes(showticklabels=False, showgrid=False, secondary_y=False)
+
+    # Right y-axis (multiples / percentages)
+    if _has_secondary:
+        _pct_metrics = [m for m in _non_price_metrics if "%" in m]
+        _mult_metrics = [m for m in _non_price_metrics if "%" not in m]
+        if _pct_metrics and not _mult_metrics:
+            _right_suffix = "%"
+            _right_fmt = ",.1f"
+        elif _mult_metrics and not _pct_metrics:
+            _right_suffix = "x"
+            _right_fmt = ",.1f"
+        else:
+            _right_suffix = ""
+            _right_fmt = ",.1f"
+        fig.update_yaxes(
+            gridcolor=PLOTLY_GRID, color=PLOTLY_TEXT,
+            tickformat=_right_fmt,
+            ticksuffix=_right_suffix,
+            secondary_y=True,
+            showgrid=not _has_price,
+        )
+    else:
+        fig.update_yaxes(showticklabels=False, showgrid=False, secondary_y=True)
+
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> '
+    'Yahoo Finance (share price) · FactSet (multiples &amp; operating metrics)</div>',
+    unsafe_allow_html=True,
+)
 
 
 # ── Multiples vs segment median ───────────────────────────────────────────────
-st.markdown("#### Multiples — Company vs. Segment Median")
+st.markdown("#### Multiples — Company vs. Peer Median")
 
 
 def _seg_median(rows, key: str):
@@ -228,7 +389,51 @@ def _seg_median(rows, key: str):
     return sorted(vals)[len(vals)//2] if vals else None
 
 
-peer_count = len(segment_peers)
+def _seg_median_pct(rows, key: str):
+    """Median for percentage-type metrics (no 0-75 filter)."""
+    vals = [r.get(key) for r in rows if r.get(key) is not None]
+    return sorted(vals)[len(vals)//2] if vals else None
+
+
+# ── Customizable peer set via expander ────────────────────────────────────────
+_peer_tickers_in_segment = sorted(
+    [(r.get("ticker"), r.get("name", r.get("ticker"))) for r in segment_peers],
+    key=lambda x: x[1],
+)
+
+# Initialize peer selection in session state
+_peer_state_key = f"_peer_sel_{ticker}"
+if _peer_state_key not in st.session_state:
+    st.session_state[_peer_state_key] = [t for t, _ in _peer_tickers_in_segment]
+
+with st.expander(f"Customize peer group ({len(_peer_tickers_in_segment)} {seg_short} companies)", expanded=False):
+    _sel_all_col, _clear_col = st.columns(2)
+    if _sel_all_col.button("Select All", key="_peer_sel_all"):
+        st.session_state[_peer_state_key] = [t for t, _ in _peer_tickers_in_segment]
+        st.rerun()
+    if _clear_col.button("Clear All", key="_peer_clr_all"):
+        st.session_state[_peer_state_key] = []
+        st.rerun()
+
+    _peer_selected = []
+    _cols_per_row = 3
+    for row_start in range(0, len(_peer_tickers_in_segment), _cols_per_row):
+        row_items = _peer_tickers_in_segment[row_start:row_start + _cols_per_row]
+        cols = st.columns(_cols_per_row)
+        for j, (ptk, pname) in enumerate(row_items):
+            checked = ptk in st.session_state[_peer_state_key]
+            if cols[j].checkbox(
+                f"{ptk} — {pname}",
+                value=checked,
+                key=f"_peer_cb_{ticker}_{ptk}",
+            ):
+                _peer_selected.append(ptk)
+    st.session_state[_peer_state_key] = _peer_selected
+
+# Filter peers based on selection
+_custom_peers = [r for r in segment_peers if r.get("ticker") in st.session_state.get(_peer_state_key, [])]
+peer_count = len(_custom_peers)
+
 mult_rows = [
     ("NTM EV/Rev",     "ntm_tev_rev"),
     ("NTM EV/EBITDA",  "ntm_tev_ebitda"),
@@ -259,9 +464,9 @@ _logo_cell = (
 rows_html = []
 for label, key in mult_rows:
     co_val = snapshot.get(key)
-    med_val = _seg_median(segment_peers, key)
-    q25 = _seg_quartile(segment_peers, key, 0.25)
-    q75 = _seg_quartile(segment_peers, key, 0.75)
+    med_val = _seg_median(_custom_peers, key)
+    q25 = _seg_quartile(_custom_peers, key, 0.25)
+    q75 = _seg_quartile(_custom_peers, key, 0.75)
 
     # Highlight extreme values (above 75th pct or below 25th pct)
     co_style = ""
@@ -303,6 +508,8 @@ for label, key in mult_rows:
         f'</tr>'
     )
 
+_peer_label = "Peer Median" if peer_count < len(segment_peers) else f"{seg_short} Median"
+
 st.markdown(
     f'<div style="border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
     f'overflow:hidden;background:#FFFFFF;'
@@ -317,7 +524,7 @@ st.markdown(
     f'border-bottom:1px solid #E5E7EB;">{_logo_cell}{ticker}</th>'
     f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
     f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
-    f'border-bottom:1px solid #E5E7EB;">{seg_short} Median</th>'
+    f'border-bottom:1px solid #E5E7EB;">{_peer_label}</th>'
     f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
     f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
     f'border-bottom:1px solid #E5E7EB;">vs. Median</th>'
@@ -327,8 +534,99 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.caption(
-    f"Median computed across {peer_count} {seg_short} companies. "
-    f"Highlighted cells fall above the 75th or below the 25th percentile of segment peers."
+    f"Median computed across {peer_count} peer companies. "
+    f"Highlighted cells fall above the 75th or below the 25th percentile."
+)
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> FactSet</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── Operating Metrics Benchmark ──────────────────────────────────────────────
+st.markdown("#### Operating Metrics — Company vs. Peer Median")
+
+_op_metrics = [
+    ("NTM Revenue Growth",  "ntm_revenue_growth"),
+    ("NTM EBITDA Margin",   "ebitda_margin"),
+    ("Gross Margin",        "gross_margin"),
+]
+
+_op_rows_html = []
+for _op_label, _op_key in _op_metrics:
+    _co_val = snapshot.get(_op_key)
+    _med_val = _seg_median_pct(_custom_peers, _op_key)
+
+    _co_display = _fmt_pct(_co_val)
+    _med_display = _fmt_pct(_med_val)
+
+    if _co_val is not None and _med_val is not None and _med_val != 0:
+        _delta_pp = (_co_val - _med_val) * 100  # percentage point difference
+        if _delta_pp >= 0:
+            _op_delta_html = (
+                f'<span style="color:#047857;background:rgba(16,185,129,0.10);'
+                f'padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">'
+                f'+{_delta_pp:.1f}pp</span>'
+            )
+        else:
+            _op_delta_html = (
+                f'<span style="color:#B91C1C;background:rgba(239,68,68,0.10);'
+                f'padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">'
+                f'{_delta_pp:.1f}pp</span>'
+            )
+    else:
+        _op_delta_html = '<span style="color:#9CA3AF;">—</span>'
+
+    _co_color = "#111827"
+    if _co_val is not None and "Growth" in _op_label:
+        _co_color = "#16A34A" if _co_val > 0 else "#DC2626"
+
+    _op_rows_html.append(
+        f'<tr>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'font-weight:500;color:#374151;">{_op_label}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;font-variant-numeric:tabular-nums;font-weight:600;'
+        f'color:{_co_color};">{_co_display}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;color:#6B7280;font-variant-numeric:tabular-nums;">'
+        f'{_med_display}</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #F3F4F6;'
+        f'text-align:right;">{_op_delta_html}</td>'
+        f'</tr>'
+    )
+
+st.markdown(
+    f'<div style="border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
+    f'overflow:hidden;background:#FFFFFF;'
+    f'box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+    f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    f'<thead><tr style="background:#F9FAFB;">'
+    f'<th style="text-align:left;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">Metric</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">{_logo_cell}{ticker}</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">{_peer_label}</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;'
+    f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+    f'border-bottom:1px solid #E5E7EB;">vs. Median</th>'
+    f'</tr></thead>'
+    f'<tbody>{"".join(_op_rows_html)}</tbody>'
+    f'</table></div>',
+    unsafe_allow_html=True,
+)
+st.caption(
+    f"Difference shown in percentage points (pp) relative to peer median ({peer_count} companies)."
+)
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> FactSet</div>',
+    unsafe_allow_html=True,
 )
 
 
@@ -356,7 +654,7 @@ for _is_label, _is_val in _is_rows:
 
 _margin_rows = [
     ("Gross Margin", snapshot.get("gross_margin")),
-    ("EBITDA Margin", snapshot.get("ebitda_margin")),
+    ("NTM EBITDA Margin", snapshot.get("ebitda_margin")),
     ("NTM Revenue Growth", snapshot.get("ntm_revenue_growth")),
     ("3Y Revenue CAGR", snapshot.get("n3y_revenue_cagr")),
 ]
@@ -404,6 +702,14 @@ def _fetch_analyst_data(yt: str):
     try:
         t = yf.Ticker(yt)
         info = t.info or {}
+        # Try to get individual broker upgrades/downgrades
+        upgrades = None
+        try:
+            ud_df = t.upgrades_downgrades
+            if ud_df is not None and not ud_df.empty:
+                upgrades = ud_df.head(20).reset_index().to_dict("records")
+        except Exception:
+            pass
         return {
             "target_low": info.get("targetLowPrice"),
             "target_mean": info.get("targetMeanPrice"),
@@ -412,6 +718,7 @@ def _fetch_analyst_data(yt: str):
             "current": info.get("currentPrice") or info.get("regularMarketPrice"),
             "recommendation": info.get("recommendationKey"),
             "num_analysts": info.get("numberOfAnalystOpinions"),
+            "upgrades_downgrades": upgrades,
         }
     except Exception:
         return {}
@@ -480,9 +787,86 @@ if _analyst and _analyst.get("target_mean"):
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Individual broker estimates (upgrades/downgrades) ─────────────────────
+    _ud = _analyst.get("upgrades_downgrades")
+    if _ud and len(_ud) > 0:
+        st.markdown(
+            "<div style='margin-top:16px;'>"
+            "<span style='font-size:13px;font-weight:600;color:#374151;'>"
+            "Recent Broker Actions</span></div>",
+            unsafe_allow_html=True,
+        )
+        _broker_rows_html = []
+        for _b in _ud[:15]:
+            _b_firm = _b.get("Firm", _b.get("firm", ""))
+            _b_grade = _b.get("ToGrade", _b.get("toGrade", ""))
+            _b_from = _b.get("FromGrade", _b.get("fromGrade", ""))
+            _b_action = _b.get("Action", _b.get("action", ""))
+            _b_date_raw = _b.get("Date", _b.get("GradeDate", _b.get("date", "")))
+            # Format date
+            try:
+                if hasattr(_b_date_raw, "strftime"):
+                    _b_date_str = _b_date_raw.strftime("%b %d, %Y")
+                else:
+                    _b_date_str = pd.to_datetime(str(_b_date_raw)).strftime("%b %d, %Y")
+            except Exception:
+                _b_date_str = str(_b_date_raw)[:10] if _b_date_raw else ""
+
+            # Color the action
+            _action_color = "#6B7280"
+            _action_lower = str(_b_action).lower()
+            if "up" in _action_lower or "init" in _action_lower:
+                _action_color = "#16A34A"
+            elif "down" in _action_lower:
+                _action_color = "#DC2626"
+
+            _grade_display = _b_grade
+            if _b_from and _b_from != _b_grade:
+                _grade_display = f"{_b_from} &rarr; {_b_grade}"
+
+            _broker_rows_html.append(
+                f'<tr>'
+                f'<td style="padding:6px 12px;border-bottom:1px solid #F3F4F6;'
+                f'color:#374151;font-size:12px;">{_b_date_str}</td>'
+                f'<td style="padding:6px 12px;border-bottom:1px solid #F3F4F6;'
+                f'font-weight:500;color:#111827;font-size:12px;">{_b_firm}</td>'
+                f'<td style="padding:6px 12px;border-bottom:1px solid #F3F4F6;'
+                f'color:{_action_color};font-weight:600;font-size:12px;">{_b_action}</td>'
+                f'<td style="padding:6px 12px;border-bottom:1px solid #F3F4F6;'
+                f'color:#374151;font-size:12px;">{_grade_display}</td>'
+                f'</tr>'
+            )
+
+        st.markdown(
+            f'<div style="border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
+            f'overflow:hidden;background:#FFFFFF;margin-top:8px;'
+            f'box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+            f'<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+            f'<thead><tr style="background:#F9FAFB;">'
+            f'<th style="text-align:left;padding:8px 12px;font-size:10px;'
+            f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+            f'border-bottom:1px solid #E5E7EB;">Date</th>'
+            f'<th style="text-align:left;padding:8px 12px;font-size:10px;'
+            f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+            f'border-bottom:1px solid #E5E7EB;">Firm</th>'
+            f'<th style="text-align:left;padding:8px 12px;font-size:10px;'
+            f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+            f'border-bottom:1px solid #E5E7EB;">Action</th>'
+            f'<th style="text-align:left;padding:8px 12px;font-size:10px;'
+            f'text-transform:uppercase;letter-spacing:0.05em;color:#6B7280;'
+            f'border-bottom:1px solid #E5E7EB;">Rating</th>'
+            f'</tr></thead>'
+            f'<tbody>{"".join(_broker_rows_html)}</tbody>'
+            f'</table></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("Individual broker estimates not available. Showing aggregate consensus only.")
+
     st.markdown(
         '<div style="font-size:10px;color:#9CA3AF;margin-top:4px;margin-bottom:16px;">'
-        '<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (analyst consensus)</div>',
+        '<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (analyst consensus &amp; broker actions)</div>',
         unsafe_allow_html=True,
     )
 else:
@@ -545,6 +929,12 @@ else:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-top:4px;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance</div>',
+    unsafe_allow_html=True,
+)
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────

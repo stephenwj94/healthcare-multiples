@@ -59,9 +59,9 @@ SEGMENT_DISPLAY = {
     "pharma":          "Pharma",
     "consumer_health": "Consumer Health",
     "medtech":         "MedTech",
-    "life_sci_tools":  "Life Sci Tools / Dx / Bioprocessing",
+    "life_sci_tools":  "LST / Dx / Bioprocessing",
     "services":        "Asset-Light Services",
-    "cdmo":            "CDMOs",
+    "cdmo":            "Asset-Heavy Services",
     "health_tech":     "Health Tech",
 }
 

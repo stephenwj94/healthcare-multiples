@@ -7,6 +7,7 @@ import io
 import streamlit as st
 import streamlit.components.v1 as _st_comps
 import numpy as np
+import pandas as pd
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -34,7 +35,7 @@ from components.logos import logo_img_tag
 
 render_sidebar()
 
-# ── Page header ──────────────────────────────────────────────────────────────
+# -- Page header ---------------------------------------------------------------
 
 st.title("Comps Table")
 st.markdown(
@@ -44,11 +45,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Data loading ─────────────────────────────────────────────────────────────
+# -- Data loading --------------------------------------------------------------
 
 db = DBManager(DB_PATH)
 
-# ── Segment toggles ──────────────────────────────────────────────────────────
+# -- Segment toggles (checkboxes) ---------------------------------------------
 
 SEGMENTS = list(SEGMENT_DISPLAY.keys())
 SEGMENT_LABELS = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
@@ -59,10 +60,10 @@ if "comps_segments" not in st.session_state:
 
 selected = st.session_state["comps_segments"]
 
-# Build toggle pill buttons as HTML + Streamlit columns
-pill_cols = st.columns(len(SEGMENTS) + 1)  # extra col for "All" toggle
+# Build toggle checkboxes in a single row
+chk_cols = st.columns(len(SEGMENTS) + 1)  # extra col for "All/Clear" toggle
 
-with pill_cols[0]:
+with chk_cols[0]:
     all_selected = len(selected) == len(SEGMENTS)
     if st.button(
         "All" if not all_selected else "Clear",
@@ -78,49 +79,14 @@ with pill_cols[0]:
 for i, seg_key in enumerate(SEGMENTS):
     label = SEGMENT_LABELS[seg_key]
     is_on = seg_key in selected
-    with pill_cols[i + 1]:
-        if st.button(
-            label,
-            key=f"comps_pill_{seg_key}",
-            type="primary" if is_on else "secondary",
-        ):
-            if is_on:
-                st.session_state["comps_segments"].discard(seg_key)
-            else:
-                st.session_state["comps_segments"].add(seg_key)
+    with chk_cols[i + 1]:
+        new_val = st.checkbox(label, value=is_on, key=f"comps_chk_{seg_key}")
+        if new_val and seg_key not in st.session_state["comps_segments"]:
+            st.session_state["comps_segments"].add(seg_key)
             st.rerun()
-
-# Inject CSS to color the pill buttons per-segment
-pill_css_parts = []
-for i, seg_key in enumerate(SEGMENTS):
-    bg, fg = LIGHT_BADGE_STYLES.get(SEGMENT_SHORT.get(seg_key, ""), ("#E5E7EB", "#374151"))
-    full_color = SEGMENT_COLORS.get(seg_key, "#374151")
-    is_on = seg_key in selected
-    # Target the i+2th column's button (1-indexed; first col is All/Clear)
-    col_idx = i + 2  # 1-indexed in CSS nth-child
-    if is_on:
-        pill_css_parts.append(
-            f"""
-            [data-testid="stHorizontalBlock"] > div:nth-child({col_idx}) button[kind="primary"] {{
-                background-color: {full_color} !important;
-                border-color: {full_color} !important;
-                color: #FFFFFF !important;
-            }}
-            """
-        )
-    else:
-        pill_css_parts.append(
-            f"""
-            [data-testid="stHorizontalBlock"] > div:nth-child({col_idx}) button[kind="secondary"] {{
-                background-color: #F3F4F6 !important;
-                border-color: #D1D5DB !important;
-                color: #9CA3AF !important;
-            }}
-            """
-        )
-
-if pill_css_parts:
-    st.markdown(f"<style>{''.join(pill_css_parts)}</style>", unsafe_allow_html=True)
+        elif not new_val and seg_key in st.session_state["comps_segments"]:
+            st.session_state["comps_segments"].discard(seg_key)
+            st.rerun()
 
 selected = st.session_state["comps_segments"]
 
@@ -128,7 +94,7 @@ if not selected:
     st.info("Select at least one segment to display the comps table.")
     st.stop()
 
-# ── Load & filter data ───────────────────────────────────────────────────────
+# -- Load & filter data --------------------------------------------------------
 
 all_data = db.get_all_latest_snapshots()
 
@@ -148,7 +114,7 @@ if not filtered_data:
     st.warning("No data available for the selected segments. Run the data fetcher to populate the database.")
     st.stop()
 
-# ── Build DataFrame ──────────────────────────────────────────────────────────
+# -- Build DataFrame -----------------------------------------------------------
 
 df = build_comps_df(filtered_data)
 if df.empty:
@@ -157,39 +123,39 @@ if df.empty:
 
 mean_d, median_d = compute_comps_summary(df)
 
-# ── Column definitions ───────────────────────────────────────────────────────
-# Reordered: Revenue multiples, Gross Profit, EBITDA. No GA columns.
-# Price perf: 1M Chg and 1Y Chg labels (underlying data: chg_2w, chg_2m for now).
+# -- Column definitions --------------------------------------------------------
+# Reduced widths to minimize horizontal scrolling.
+# Key multiples visible without scrolling; price perf at far right.
 
-_COL1_W = 160
+_COL1_W = 140
 
 _COLS = [
     # Info group (sticky)
-    ("Company",           "name",          160, True,  "left"),
-    ("Ticker",            "ticker",         70, True,  "left"),
+    ("Company",           "name",          140, True,  "left"),
+    ("Ticker",            "ticker",         62, True,  "left"),
     # Segment pill
-    ("Segment",           "segment",        90, False, "center"),
+    ("Segment",           "segment",        80, False, "center"),
     # Market Data
-    ("Mkt\nCap",          "mkt_cap_m",      76, False, "right"),
-    ("TEV",               "tev_m",          76, False, "right"),
-    ("%\n52W Hi",         "pct_52wk",       76, False, "right"),
+    ("Mkt\nCap",          "mkt_cap_m",      66, False, "right"),
+    ("TEV",               "tev_m",          66, False, "right"),
+    ("%\n52W Hi",         "pct_52wk",       58, False, "right"),
     # Revenue multiples
-    ("NTM\nEV/Rev",       "ev_rev",         76, False, "right"),
-    ("LTM\nEV/Rev",       "ltm_rev_x",      76, False, "right"),
+    ("NTM\nEV/Rev",       "ev_rev",         62, False, "right"),
+    ("LTM\nEV/Rev",       "ltm_rev_x",      62, False, "right"),
     # Gross Profit multiples
-    ("NTM\nEV/GP",        "ev_gp",          76, False, "right"),
-    ("LTM\nEV/GP",        "ltm_gp_x",       76, False, "right"),
+    ("NTM\nEV/GP",        "ev_gp",          62, False, "right"),
+    ("LTM\nEV/GP",        "ltm_gp_x",       62, False, "right"),
     # EBITDA multiples
-    ("NTM\nEV/EBITDA",    "ev_ebitda",      76, False, "right"),
-    ("LTM\nEV/EBITDA",    "ltm_ebitda_x",   76, False, "right"),
+    ("NTM\nEV/EBITDA",    "ev_ebitda",      66, False, "right"),
+    ("LTM\nEV/EBITDA",    "ltm_ebitda_x",   66, False, "right"),
     # Growth & Margins
-    ("NTM Rev\nGr%",      "rev_gr",          76, False, "right"),
-    ("3Y\nCAGR",          "cagr_3y",         76, False, "right"),
-    ("Gross\nMgn",        "gm",              76, False, "right"),
-    ("EBITDA\nMgn",       "ebitda_mgn",      76, False, "right"),
+    ("NTM Rev\nGr%",      "rev_gr",          62, False, "right"),
+    ("3Y\nCAGR",          "cagr_3y",         58, False, "right"),
+    ("Gross\nMgn",        "gm",              58, False, "right"),
+    ("NTM EBITDA\nMgn",   "ebitda_mgn",      68, False, "right"),
     # Price Performance (relabeled)
-    ("1M\nChg",           "chg_2w",          76, False, "right"),
-    ("1Y\nChg",           "chg_2m",          76, False, "right"),
+    ("1M\nChg",           "chg_2w",          58, False, "right"),
+    ("1Y\nChg",           "chg_2m",          58, False, "right"),
 ]
 
 _GROUPS = [
@@ -204,9 +170,6 @@ _GROUPS = [
 ]
 
 # Col indices where group-divider left-border is applied
-# 0:Company 1:Ticker | 2:Segment | 3:MktCap 4:TEV 5:52WH | 6:NTM EV/Rev 7:LTM EV/Rev
-# | 8:NTM EV/GP 9:LTM EV/GP | 10:NTM EV/EBITDA 11:LTM EV/EBITDA
-# | 12:NTM Rev Gr% 13:3Y CAGR 14:GM 15:EBITDA Mgn | 16:1M Chg 17:1Y Chg
 _GROUP_STARTS = {2, 3, 6, 8, 10, 12, 16}
 
 _CFG = {
@@ -216,13 +179,13 @@ _CFG = {
     "tev_idx":      4,
 }
 
-# ── LTM column keys — receive lighter text styling ──────────────────────────
+# -- LTM column keys -- receive lighter text styling --------------------------
 _LTM_KEYS = {"ltm_rev_x", "ltm_ebitda_x", "ltm_gp_x"}
 
-# ── Multiple column keys — non-positive values sort last ────────────────────
+# -- Multiple column keys -- non-positive values sort last --------------------
 _MULT_KEYS = {"ev_rev", "ev_ebitda", "ev_gp", "ltm_rev_x", "ltm_ebitda_x", "ltm_gp_x"}
 
-# ── Short display names (full DB name -> condensed label) ────────────────────
+# -- Short display names (full DB name -> condensed label) ---------------------
 _SHORT_NAMES = {
     "Zoom Video Communications, Inc.": "Zoom",
     "Zoom Video Communications":       "Zoom",
@@ -230,14 +193,13 @@ _SHORT_NAMES = {
     "ServiceNow, Inc.":                "ServiceNow",
 }
 
-# ── Pending / rumored M&A annotations ────────────────────────────────────────
+# -- Pending / rumored M&A annotations ----------------------------------------
 _MA_NOTES = {
     "OS": "Pending take-private -- Hg Capital ($6.4B all-cash; expected H1 2026)",
 }
 
-# ── Segment pill badge ──────────────────────────────────────────────────────
+# -- Segment pill badge --------------------------------------------------------
 
-# Pill badge colors (bg, text) per segment -- light theme
 SEGMENT_PILL_COLORS = {
     "pharma":          ("#DBEAFE", "#1D4ED8"),
     "consumer_health": ("#D1FAE5", "#065F46"),
@@ -255,19 +217,19 @@ def _cell_segment_pill(segment_key):
     bg, fg = SEGMENT_PILL_COLORS.get(str(segment_key), ("#374151", "#D1D5DB"))
     safe = _html_lib.escape(short)
     return (
-        f'<span style="background:{bg};color:{fg};padding:2px 8px;'
-        f'border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;">'
+        f'<span style="background:{bg};color:{fg};padding:2px 6px;'
+        f'border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;">'
         f'{safe}</span>'
     )
 
 
-# ── Background colors ───────────────────────────────────────────────────────
+# -- Background colors ---------------------------------------------------------
 _BG_BASE  = "#FFFFFF"
 _BG_ALT   = "#FAFBFD"
 _BG_HOVER = "#F0F4FF"
 _BG_SUM   = "#E2E8F0"
 
-# ── CSS ─────────────────────────────────────────────────────────────────────
+# -- CSS -----------------------------------------------------------------------
 _CT_CSS = """<style>
 .ct-outer {
     overflow-x: auto;
@@ -281,16 +243,15 @@ _CT_CSS = """<style>
 .ct-tbl {
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 1700px;
     width: 100%%;
-    font-size: 12px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
     background: %(base)s;
 }
 .ct-thead { position: sticky; top: 0; z-index: 22; background: #1E293B; }
 .ct-gr {
-    padding: 6px 10px;
-    font-size: 10px;
+    padding: 4px 6px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.07em;
     text-transform: uppercase;
@@ -298,8 +259,8 @@ _CT_CSS = """<style>
     white-space: nowrap;
 }
 .ct-ch {
-    padding: 10px 6px 8px;
-    font-size: 10.5px;
+    padding: 6px 4px 6px;
+    font-size: 9.5px;
     font-weight: 700;
     color: #FFFFFF;
     text-transform: uppercase;
@@ -308,7 +269,7 @@ _CT_CSS = """<style>
     text-align: center;
     border-bottom: none;
     white-space: normal;
-    line-height: 1.4;
+    line-height: 1.3;
     vertical-align: bottom;
 }
 .ct-ch.lft { text-align: left; }
@@ -320,7 +281,7 @@ _CT_CSS = """<style>
 .ct-thead tr { background: #1E293B !important; }
 .ct-thead th { background: #1E293B !important; }
 .ct-td {
-    padding: 2px 8px;
+    padding: 2px 5px;
     text-align: right;
     border-bottom: 1px solid #F3F4F6;
     background: %(base)s;
@@ -337,8 +298,8 @@ _CT_CSS = """<style>
 .ct-sum .ct-td {
     background: %(sum)s !important;
     font-weight: 600;
-    font-size: 12px;
-    padding: 2px 8px;
+    font-size: 11px;
+    padding: 2px 5px;
     border-bottom: 1px solid #E2E8F0;
     color: #111827;
 }
@@ -348,7 +309,7 @@ _CT_CSS = """<style>
 .ct-ltm.ct-td { color: #111827; }
 .ct-ltm.ct-ch { color: #FFFFFF; }
 .ct-s0 { position: sticky; left: 0;        z-index: 6; }
-.ct-s1 { position: sticky; left: 160px;    z-index: 6; border-right: 1px solid #E5E7EB; }
+.ct-s1 { position: sticky; left: %(col1w)spx;    z-index: 6; border-right: 1px solid #E5E7EB; }
 .ct-alt .ct-td.ct-s0,
 .ct-alt .ct-td.ct-s1       { background: %(alt)s; }
 .ct-sum .ct-td.ct-s0,
@@ -357,7 +318,7 @@ _CT_CSS = """<style>
 .ct-tr:hover .ct-td.ct-s1,
 .ct-alt:hover .ct-td.ct-s0,
 .ct-alt:hover .ct-td.ct-s1 { background-color: %(hover)s !important; }
-.ct-tkr { color:#111827; font-weight:600; font-size:11px; text-decoration:none; }
+.ct-tkr { color:#111827; font-weight:600; font-size:10px; text-decoration:none; }
 .ct-tkr:hover { text-decoration:underline; }
 .ct-ch[data-col] { cursor: pointer; user-select: none; }
 .ct-ch[data-col]:hover { color: #FFFFFF; }
@@ -365,22 +326,22 @@ _CT_CSS = """<style>
     content: "\\2195";
     color: #D1D5DB;
     display: block;
-    font-size: 8px;
+    font-size: 7px;
     line-height: 1;
-    margin-top: 2px;
+    margin-top: 1px;
     text-align: center;
 }
 .ct-ch.ct-sort-asc  { color: #3B82F6 !important; }
 .ct-ch.ct-sort-desc { color: #3B82F6 !important; }
-.ct-ch.ct-sort-asc::after  { content: "\\25B2"; color: #3B82F6; display: block; font-size: 8px; line-height: 1; margin-top: 2px; text-align: center; }
-.ct-ch.ct-sort-desc::after { content: "\\25BC"; color: #3B82F6; display: block; font-size: 8px; line-height: 1; margin-top: 2px; text-align: center; }
+.ct-ch.ct-sort-asc::after  { content: "\\25B2"; color: #3B82F6; display: block; font-size: 7px; line-height: 1; margin-top: 1px; text-align: center; }
+.ct-ch.ct-sort-desc::after { content: "\\25BC"; color: #3B82F6; display: block; font-size: 7px; line-height: 1; margin-top: 1px; text-align: center; }
 /* Company name link styling */
 a.ct-name-link { text-decoration: none; color: inherit; }
 a.ct-name-link:hover { text-decoration: underline; }
-</style>""" % {"base": _BG_BASE, "alt": _BG_ALT, "hover": _BG_HOVER, "sum": _BG_SUM}
+</style>""" % {"base": _BG_BASE, "alt": _BG_ALT, "hover": _BG_HOVER, "sum": _BG_SUM, "col1w": _COL1_W}
 
 
-# ── Sortable-column JS ──────────────────────────────────────────────────────
+# -- Sortable-column JS -------------------------------------------------------
 _STICKY_JS = """<script>
 (function(){
   try {
@@ -482,7 +443,7 @@ def _inject_sticky_js():
     _st_comps.html(_STICKY_JS, height=1)
 
 
-# ── Cell renderer ────────────────────────────────────────────────────────────
+# -- Cell renderer -------------------------------------------------------------
 
 def _render_cell(key, val, row_dict=None):
     """Dispatch a (column_key, value) pair to the right HTML formatter."""
@@ -495,7 +456,7 @@ def _render_cell(key, val, row_dict=None):
         safe_ticker = _html_lib.escape(str(ticker))
         name_span = (
             f'<span title="{safe_full}" style="font-weight:500;color:#111827;'
-            f'white-space:nowrap;display:inline-block;max-width:152px;'
+            f'white-space:nowrap;display:inline-block;max-width:132px;'
             f'overflow:hidden;text-overflow:ellipsis">{safe_disp}</span>'
         )
         # M&A flag
@@ -515,7 +476,7 @@ def _render_cell(key, val, row_dict=None):
         href = f"/Company?ticker={safe}"
         logo_span = (
             f'<span style="display:inline-flex;align-items:center;'
-            f'width:14px;height:14px;margin-right:4px;flex-shrink:0;">{logo}</span>'
+            f'width:14px;height:14px;margin-right:3px;flex-shrink:0;">{logo}</span>'
             if logo else ""
         )
         return (
@@ -549,7 +510,7 @@ def _render_cell(key, val, row_dict=None):
     return _html_lib.escape(str(val))
 
 
-# ── Sort value helper ────────────────────────────────────────────────────────
+# -- Sort value helper ---------------------------------------------------------
 
 def _sort_val(key, val):
     if val is None:
@@ -563,7 +524,7 @@ def _sort_val(key, val):
     return _html_lib.escape(str(val).lower())
 
 
-# ── HTML builders ────────────────────────────────────────────────────────────
+# -- HTML builders -------------------------------------------------------------
 
 def _thead_html(cfg):
     """Two-row <thead>: group super-header row + column name row."""
@@ -682,11 +643,149 @@ def _build_table_html(df, mean_d, median_d, cfg):
     return "".join(parts)
 
 
-# ── Render ───────────────────────────────────────────────────────────────────
+# -- Excel export --------------------------------------------------------------
+
+_EXCEL_COLUMNS = [
+    ("Company",          "name",          28, None),
+    ("Ticker",           "ticker",        10, None),
+    ("Segment",          "segment",       16, None),
+    ("Mkt Cap ($mm)",    "mkt_cap_m",     14, '#,##0;(#,##0)'),
+    ("TEV ($mm)",        "tev_m",         14, '#,##0;(#,##0)'),
+    ("% 52W Hi",         "pct_52wk",      10, '0%;(0%)'),
+    ("NTM EV/Rev",       "ev_rev",        11, '0.0"x";(0.0"x")'),
+    ("LTM EV/Rev",       "ltm_rev_x",     11, '0.0"x";(0.0"x")'),
+    ("NTM EV/GP",        "ev_gp",         11, '0.0"x";(0.0"x")'),
+    ("LTM EV/GP",        "ltm_gp_x",      11, '0.0"x";(0.0"x")'),
+    ("NTM EV/EBITDA",    "ev_ebitda",     13, '0.0"x";(0.0"x")'),
+    ("LTM EV/EBITDA",    "ltm_ebitda_x",  13, '0.0"x";(0.0"x")'),
+    ("NTM Rev Gr%",      "rev_gr",        12, '0.0%;(0.0%)'),
+    ("3Y CAGR",          "cagr_3y",       10, '0.0%;(0.0%)'),
+    ("Gross Mgn",        "gm",            10, '0%;(0%)'),
+    ("NTM EBITDA Mgn",   "ebitda_mgn",    14, '0%;(0%)'),
+    ("1M Chg",           "chg_2w",        10, '0.0%;(0.0%)'),
+    ("1Y Chg",           "chg_2m",        10, '0.0%;(0.0%)'),
+]
+
+
+def _build_filtered_excel(df, mean_d, median_d):
+    """Build an Excel workbook from the currently filtered comps view."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from datetime import date
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Comps Table"
+
+    columns = _EXCEL_COLUMNS
+
+    hdr_font = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+    hdr_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    sum_fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+    sum_font = Font(name="Calibri", bold=True, size=10)
+    alt_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    data_font_black = Font(name="Calibri", size=10, color="111827")
+    data_font_blue = Font(name="Calibri", size=10, color="0000FF")
+    data_align_r = Alignment(horizontal="right", vertical="center")
+    data_align_l = Alignment(horizontal="left", vertical="center")
+    thin_border = Border(bottom=Side(style="thin", color="E5E7EB"))
+    thick_border = Border(bottom=Side(style="medium", color="334155"))
+
+    # Title
+    ws.cell(row=1, column=1, value="Healthcare Comps Table")
+    ws.cell(row=1, column=1).font = Font(name="Calibri", bold=True, size=12)
+    ws.cell(row=2, column=1, value=f"Data as of {date.today().strftime('%B %d, %Y')}. All financials in $mm.")
+    ws.cell(row=2, column=1).font = Font(name="Calibri", size=9, color="6B7280")
+
+    # Headers (row 4)
+    hdr_row = 4
+    for col_idx, (header, key, width, fmt) in enumerate(columns, 1):
+        cell = ws.cell(row=hdr_row, column=col_idx, value=header)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = hdr_align
+        cell.border = thick_border
+        ws.column_dimensions[cell.column_letter].width = width
+
+    # Summary rows (Mean / Median)
+    def _write_summary_row(row_num, label, summary_dict):
+        for col_idx, (header, key, width, fmt) in enumerate(columns, 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            cell.fill = sum_fill
+            cell.font = sum_font
+            cell.border = thin_border
+            cell.alignment = data_align_r
+            if col_idx == 1:
+                cell.value = label
+                cell.alignment = data_align_l
+            elif col_idx <= 3:
+                continue
+            else:
+                val = summary_dict.get(key)
+                if val is not None and not (isinstance(val, float) and (val != val)):
+                    cell.value = val
+                    if fmt:
+                        cell.number_format = fmt
+
+    _write_summary_row(hdr_row + 1, "Mean", mean_d)
+    _write_summary_row(hdr_row + 2, "Median", median_d)
+
+    # Data rows
+    data_start = hdr_row + 3
+    for i, (_, row) in enumerate(df.iterrows()):
+        row_num = data_start + i
+        is_alt = i % 2 == 1
+        for col_idx, (header, key, width, fmt) in enumerate(columns, 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            cell.border = thin_border
+            if is_alt:
+                cell.fill = alt_fill
+
+            val = row.get(key)
+            # Map segment key to display name for Excel
+            if key == "segment" and val:
+                val = SEGMENT_SHORT.get(str(val), str(val))
+
+            if val is None or (isinstance(val, float) and val != val):
+                cell.font = data_font_black
+                cell.value = None
+                continue
+
+            cell.value = val
+            if col_idx <= 3:
+                cell.font = data_font_black
+                cell.alignment = data_align_l
+            else:
+                cell.font = data_font_blue
+                cell.alignment = data_align_r
+                if fmt:
+                    cell.number_format = fmt
+
+    ws.freeze_panes = f"A{data_start}"
+    ws.sheet_view.showGridLines = False
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# -- Render --------------------------------------------------------------------
 
 _inject_sticky_js()
 
-# Subtitle
+# Download Excel button + subtitle
+dl_col, spacer_col = st.columns([1, 5])
+with dl_col:
+    xlsx_data = _build_filtered_excel(df, mean_d, median_d)
+    st.download_button(
+        label="Download Excel",
+        data=xlsx_data,
+        file_name="healthcare_comps_table.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
 st.markdown(
     '<p style="color:#94A3B8;font-size:11px;margin:0 0 2px 0;">'
     "Sorted by TEV descending. Click any column header to re-sort.</p>",
@@ -697,7 +796,7 @@ st.markdown(
 table_html = _build_table_html(df, mean_d, median_d, _CFG)
 st.markdown(table_html, unsafe_allow_html=True)
 
-# ── M&A footnote ─────────────────────────────────────────────────────────────
+# -- M&A footnote --------------------------------------------------------------
 if "ticker" in df.columns:
     present = [(t, _MA_NOTES[t]) for t in df["ticker"] if t in _MA_NOTES]
     if present:
@@ -710,7 +809,7 @@ if "ticker" in df.columns:
             unsafe_allow_html=True,
         )
 
-# ── Data source attribution ──────────────────────────────────────────────────
+# -- Data source attribution ---------------------------------------------------
 
 try:
     last_fetch = db.get_last_fetch_time()

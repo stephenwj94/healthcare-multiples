@@ -197,41 +197,49 @@ def _render_valuation_tab(daily_mult, all_data, tab_key):
             key=f"vt_view_{tab_key}",
         )
 
-    f1, f2, f3, f4, f5 = st.columns([2, 3, 2, 2, 2])
-    with f1:
+    # ── Metric / Period row ─────────────────────────────────────────────────
+    _fc1, _fc2, _fc3, _fc4, _fc5 = st.columns([2, 2, 2, 2, 2])
+    with _fc1:
         metric = st.selectbox(
             "METRIC",
             options=["NTM TEV/Revenue", "NTM TEV/EBITDA"],
             index=0,
             key=f"vt_metric_{tab_key}",
         )
-    with f2:
-        all_seg_labels = list(SEGMENT_SHORT.values())
-        sel_segs = st.multiselect(
-            "SECTORS",
-            options=all_seg_labels,
-            default=all_seg_labels,
-            key=f"vt_segs_{tab_key}",
-        )
-    with f3:
-        _gr_all = list(GROWTH_BANDS.keys())
-        vt_growth_sel = st.multiselect(
-            "GROWTH", _gr_all, default=_gr_all,
-            key=f"vt_gr_{tab_key}",
-        )
-    with f4:
-        _tv_all = list(TEV_BANDS.keys())
-        vt_tev_sel = st.multiselect(
-            "TEV", _tv_all, default=_tv_all,
-            key=f"vt_tev_{tab_key}",
-        )
-    with f5:
+    with _fc2:
         period = st.selectbox(
             "PERIOD",
             options=["1Y", "2Y", "3Y", "All"],
             index=0,
             key=f"vt_period_{tab_key}",
         )
+    with _fc3:
+        _gr_all = list(GROWTH_BANDS.keys())
+        vt_growth_sel = st.multiselect(
+            "GROWTH", _gr_all, default=_gr_all,
+            key=f"vt_gr_{tab_key}",
+        )
+    with _fc4:
+        _tv_all = list(TEV_BANDS.keys())
+        vt_tev_sel = st.multiselect(
+            "TEV", _tv_all, default=_tv_all,
+            key=f"vt_tev_{tab_key}",
+        )
+
+    # ── Sector checkboxes ────────────────────────────────────────────────────
+    all_seg_labels = list(SEGMENT_SHORT.values())
+    st.markdown(
+        '<div style="font-size:9px;font-weight:600;color:#94A3B8;'
+        'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">'
+        'SECTORS</div>',
+        unsafe_allow_html=True,
+    )
+    _seg_cols = st.columns(len(all_seg_labels))
+    sel_segs = []
+    for i, seg_label in enumerate(all_seg_labels):
+        with _seg_cols[i]:
+            if st.checkbox(seg_label, value=True, key=f"vt_seg_{tab_key}_{i}"):
+                sel_segs.append(seg_label)
 
     # ── Column mapping ───────────────────────────────────────────────────────
     _METRIC_COL = {
@@ -458,7 +466,7 @@ def _render_valuation_tab(daily_mult, all_data, tab_key):
     st.plotly_chart(
         fig,
         use_container_width=True,
-        config={"displayModeBar": False},
+        config={"scrollZoom": False, "displayModeBar": False},
         key=f"vt_chart_{tab_key}",
     )
 
@@ -473,40 +481,61 @@ def _build_scatter_df(records):
     for d in records:
         rev_x    = d.get("ntm_tev_rev")
         ebitda_x = d.get("ntm_tev_ebitda")
+        gp_x     = d.get("ntm_tev_gp")
         seg      = SEGMENT_SHORT.get(d.get("segment", ""), d.get("segment", ""))
         ticker   = d.get("ticker", "?")
         name     = d.get("name") or "?"
         tev      = d.get("enterprise_value")
         rev_gr   = d.get("ntm_revenue_growth")
         ebitda_m = d.get("ebitda_margin")
+        gross_m  = d.get("gross_margin")
         rule_x   = (ebitda_m + 2 * rev_gr) * 100 if (
             rev_gr is not None and ebitda_m is not None
         ) else None
-        if (rev_x and rev_x > 0) or (ebitda_x and ebitda_x > 0):
+        has_any = (rev_x and rev_x > 0) or (ebitda_x and ebitda_x > 0) or (gp_x and gp_x > 0)
+        if has_any:
             rows.append({
-                "Ticker":         ticker,
-                "Name":           name,
-                "Category":       seg,
-                "NTM Rev x":      rev_x    if rev_x    and rev_x    > 0 else None,
-                "NTM EBITDA x":   ebitda_x if ebitda_x and ebitda_x > 0 else None,
-                "TEV":            tev      if tev      and tev      > 0 else None,
-                "Rule of X":      rule_x,
-                "NTM Rev Growth": rev_gr   * 100 if rev_gr   is not None else None,
+                "Ticker":             ticker,
+                "Name":               name,
+                "Category":           seg,
+                "NTM Rev x":          rev_x    if rev_x    and rev_x    > 0 else None,
+                "NTM EBITDA x":       ebitda_x if ebitda_x and ebitda_x > 0 else None,
+                "NTM GP x":           gp_x     if gp_x     and gp_x     > 0 else None,
+                "TEV":                tev      if tev      and tev      > 0 else None,
+                "Rule of X":          rule_x,
+                "NTM Rev Growth":     rev_gr   * 100 if rev_gr   is not None else None,
+                "NTM EBITDA Margin":  ebitda_m * 100 if ebitda_m is not None else None,
+                "NTM Gross Margin":   gross_m  * 100 if gross_m  is not None else None,
             })
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def _chart_scatter_figure(df_plot, x_metric="EV / NTM Revenue",
-                          y_metric="Price Change %"):
+def _chart_scatter_figure(df_plot, x_metric="NTM Revenue Growth %",
+                          y_metric="NTM EV/Revenue"):
     """Return a Plotly scatter: selective labels, OLS trendline, tiered TEV
     dot sizes, near-invisible quadrant guides, rich hover."""
-    _X_COL = {"EV / NTM Revenue": "NTM Rev x",  "EV / NTM EBITDA": "NTM EBITDA x"}
-    _Y_COL = {"NTM Revenue Growth %": "NTM Rev Growth",
-              "Rule of X":            "Rule of X"}
-    _X_LBL = {"EV / NTM Revenue": "NTM TEV/Revenue (x)",
-               "EV / NTM EBITDA": "NTM TEV/EBITDA (x)"}
-    _Y_LBL = {"NTM Revenue Growth %":  "NTM Revenue Growth (%)",
-              "Rule of X":             "Rule of X  (EBITDA Mgn + 2× Rev Growth)"}
+    _X_COL = {
+        "NTM Revenue Growth %":  "NTM Rev Growth",
+        "NTM EBITDA Margin %":   "NTM EBITDA Margin",
+        "NTM Gross Margin %":    "NTM Gross Margin",
+        "Rule of X (NTM Rev Growth + NTM EBITDA Margin)": "Rule of X",
+    }
+    _Y_COL = {
+        "NTM EV/Revenue":        "NTM Rev x",
+        "NTM EV/EBITDA":         "NTM EBITDA x",
+        "NTM EV/GP":             "NTM GP x",
+    }
+    _X_LBL = {
+        "NTM Revenue Growth %":  "NTM Revenue Growth (%)",
+        "NTM EBITDA Margin %":   "NTM EBITDA Margin (%)",
+        "NTM Gross Margin %":    "NTM Gross Margin (%)",
+        "Rule of X (NTM Rev Growth + NTM EBITDA Margin)": "Rule of X  (NTM EBITDA Margin + 2× NTM Rev Growth)",
+    }
+    _Y_LBL = {
+        "NTM EV/Revenue":        "NTM EV/Revenue (x)",
+        "NTM EV/EBITDA":         "NTM EV/EBITDA (x)",
+        "NTM EV/GP":             "NTM EV/Gross Profit (x)",
+    }
 
     x_col = _X_COL.get(x_metric, "NTM Rev x")
     y_col = _Y_COL.get(y_metric, "NTM Rev Growth")
@@ -575,25 +604,28 @@ def _chart_scatter_figure(df_plot, x_metric="EV / NTM Revenue",
 
     # ── Monospace hover: short labels + right-justified values ───────────────
     _HOVER_X_LABELS = {
-        "EV / NTM Revenue": "NTM EV/Rev",
-        "EV / NTM EBITDA":  "NTM EV/EBITDA",
+        "NTM Revenue Growth %":  "NTM Rev Growth",
+        "NTM EBITDA Margin %":   "NTM EBITDA Margin",
+        "NTM Gross Margin %":    "NTM Gross Margin",
+        "Rule of X (NTM Rev Growth + NTM EBITDA Margin)": "Rule of X",
     }
     _HOVER_Y_LABELS = {
-        "NTM Revenue Growth %": "NTM Rev Growth",
-        "Rule of X":            "Rule of X",
+        "NTM EV/Revenue":  "NTM EV/Rev",
+        "NTM EV/EBITDA":   "NTM EV/EBITDA",
+        "NTM EV/GP":       "NTM EV/GP",
     }
     x_short = _HOVER_X_LABELS.get(x_metric, x_metric)
     y_short = _HOVER_Y_LABELS.get(y_metric, y_metric)
 
     def _fmt_x_val(val):
-        return f"{val:.1f}x" if pd.notna(val) else "–"
-
-    def _fmt_y_val(val):
         if not pd.notna(val):
             return "–"
-        if y_col in ("Rule of X",):
+        if x_col == "Rule of X":
             return f"{val:.0f}"
         return f"{val:.0f}%"
+
+    def _fmt_y_val(val):
+        return f"{val:.1f}x" if pd.notna(val) else "–"
 
     # Pre-compute global max value width across all rows for alignment
     _all_x_fmt = [_fmt_x_val(v) for v in df[x_col]]
@@ -690,13 +722,17 @@ def _chart_scatter_figure(df_plot, x_metric="EV / NTM Revenue",
     # ── FIX 1 + 6 + 7 — Layout ───────────────────────────────────────────────
     layout = _plotly_layout("", height=580)
 
+    # X-axis: fundamentals (growth %, margin %, Rule of X)
+    _x_suffix = "%" if x_col in ("NTM Rev Growth", "NTM EBITDA Margin", "NTM Gross Margin") else ""
+    # Y-axis: multiples (x)
+    _y_suffix = "x"
     layout["xaxis"].update(dict(
         title=dict(
             text=_X_LBL.get(x_metric, x_metric),
             font=dict(size=12, color="#374151", family="DM Sans"),
             standoff=30,
         ),
-        ticksuffix="x",
+        ticksuffix=_x_suffix,
         range=[x0_r, x1_r],
         tickfont=dict(size=11, color="#6B7280", family="DM Sans"),
         gridcolor="#F3F4F6",
@@ -711,7 +747,7 @@ def _chart_scatter_figure(df_plot, x_metric="EV / NTM Revenue",
             font=dict(size=12, color="#374151", family="DM Sans"),
             standoff=15,
         ),
-        ticksuffix="%" if y_col not in ("Rule of X",) else "",
+        ticksuffix=_y_suffix,
         range=[y0_r, y1_r],
         tickfont=dict(size=11, color="#6B7280", family="DM Sans"),
         gridcolor="#F3F4F6",
@@ -761,9 +797,6 @@ def _chart_scatter_figure(df_plot, x_metric="EV / NTM Revenue",
 
 def _render_scatter_tab(all_data, tab_key):
     """Period selector + compact filter controls + scatter chart in white card."""
-    # ── FIX 10 — compact two-row controls ─────────────────────────────────────
-    # Row 1: category, TEV, growth, outliers
-    r1c1, r1c2, r1c3, r1c4 = st.columns([2, 1, 1, 1])
 
     # Build scatter df from all records (no price-change dependency)
     df_all = _build_scatter_df(all_data)
@@ -771,47 +804,69 @@ def _render_scatter_tab(all_data, tab_key):
         st.caption("No valuation vs. performance data available.")
         return
 
-    all_cats = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
+    # ── Row 1: Category checkboxes ────────────────────────────────────────────
+    all_cats = list(SEGMENT_SHORT.values())  # canonical display names
+    st.markdown(
+        '<div style="font-size:9px;font-weight:600;color:#94A3B8;'
+        'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">'
+        'CATEGORIES</div>',
+        unsafe_allow_html=True,
+    )
+    _n_cats = len(all_cats)
+    _cat_cols = st.columns(_n_cats)
+    sel_cats = []
+    for i, cat in enumerate(all_cats):
+        with _cat_cols[i]:
+            if st.checkbox(cat, value=True, key=f"sc_cat_{tab_key}_{i}"):
+                sel_cats.append(cat)
+
+    # ── Row 2: TEV, Growth, Outliers, Reset Zoom ─────────────────────────────
+    r1c1, r1c2, r1c3, r1c4 = st.columns([1.5, 1.5, 1.5, 1.5])
     with r1c1:
-        sel_cats = st.multiselect(
-            "CATEGORY",
-            options=all_cats, default=all_cats,
-            key=f"sc_cats_{tab_key}",
-        )
-    with r1c2:
         _tv_all2 = list(TEV_BANDS.keys())
         sc_tev_sel = st.multiselect(
             "TEV", _tv_all2, default=_tv_all2,
             key=f"sc_tev_{tab_key}",
         )
-    with r1c3:
+    with r1c2:
         _gr_all2 = list(GROWTH_BANDS.keys())
         sc_growth_sel = st.multiselect(
             "GROWTH", _gr_all2, default=_gr_all2,
             key=f"sc_gr_{tab_key}",
         )
-    with r1c4:
+    with r1c3:
         remove_outliers = st.checkbox(
-            "REMOVE OUTLIERS (5%)",
+            "REMOVE OUTLIERS",
             value=False,
             key=f"sc_out_{tab_key}",
+            help="Removes companies with metrics beyond the 5th/95th percentile to reduce distortion from extreme values.",
         )
+    with r1c4:
+        if st.button("Reset Zoom", key=f"sc_reset_{tab_key}"):
+            st.rerun()
 
-    # Row 2: X-axis, Y-axis
+    # ── Row 3: Y-axis (multiple), X-axis (fundamental) ──────────────────────
     r2c1, r2c2, _ = st.columns([2, 2, 2])
+    _y_options = ["NTM EV/Revenue", "NTM EV/EBITDA", "NTM EV/GP"]
+    _x_options = [
+        "NTM Revenue Growth %",
+        "NTM EBITDA Margin %",
+        "NTM Gross Margin %",
+        "Rule of X (NTM Rev Growth + NTM EBITDA Margin)",
+    ]
     with r2c1:
-        x_metric = st.selectbox(
-            "X-AXIS",
-            options=["EV / NTM Revenue", "EV / NTM EBITDA"],
-            index=0,
-            key=f"sc_xax_{tab_key}",
-        )
-    with r2c2:
         y_metric = st.selectbox(
-            "Y-AXIS",
-            options=["NTM Revenue Growth %", "Rule of X"],
+            "Y-AXIS (MULTIPLE)",
+            options=_y_options,
             index=0,
             key=f"sc_yax_{tab_key}",
+        )
+    with r2c2:
+        x_metric = st.selectbox(
+            "X-AXIS (FUNDAMENTAL)",
+            options=_x_options,
+            index=0,
+            key=f"sc_xax_{tab_key}",
         )
 
     # ── Apply filters ──────────────────────────────────────────────────────────
@@ -830,13 +885,19 @@ def _render_scatter_tab(all_data, tab_key):
             lambda v: _in_any_band(v, sc_growth_sel, GROWTH_BANDS)
         )]
 
-    _X_COL_MAP = {"EV / NTM Revenue": "NTM Rev x", "EV / NTM EBITDA": "NTM EBITDA x"}
     _Y_COL_MAP = {
-        "NTM Revenue Growth %": "NTM Rev Growth",
-        "Rule of X":            "Rule of X",
+        "NTM EV/Revenue":  "NTM Rev x",
+        "NTM EV/EBITDA":   "NTM EBITDA x",
+        "NTM EV/GP":       "NTM GP x",
     }
-    x_col = _X_COL_MAP.get(x_metric, "NTM Rev x")
-    y_col = _Y_COL_MAP.get(y_metric, "NTM Rev Growth")
+    _X_COL_MAP = {
+        "NTM Revenue Growth %":  "NTM Rev Growth",
+        "NTM EBITDA Margin %":   "NTM EBITDA Margin",
+        "NTM Gross Margin %":    "NTM Gross Margin",
+        "Rule of X (NTM Rev Growth + NTM EBITDA Margin)": "Rule of X",
+    }
+    x_col = _X_COL_MAP.get(x_metric, "NTM Rev Growth")
+    y_col = _Y_COL_MAP.get(y_metric, "NTM Rev x")
     df_plot = df_plot.dropna(subset=[x_col, y_col])
 
     if remove_outliers and len(df_plot) >= 10:
@@ -854,7 +915,7 @@ def _render_scatter_tab(all_data, tab_key):
     fig = _chart_scatter_figure(df_plot, x_metric, y_metric)
     if fig:
         st.plotly_chart(fig, use_container_width=True, key=f"scatter_{tab_key}",
-                        config={"displayModeBar": False})
+                        config={"scrollZoom": False, "displayModeBar": False})
     else:
         st.caption("Could not render chart with the current data.")
 
@@ -905,7 +966,7 @@ def _render_r2_bar(result, y_label="Current", height=120):
     segments = [
         ("Revenue Growth", result["r2_growth"], "#3B82F6"),
         ("Gross Margin", result["r2_gm"], "#10B981"),
-        ("EBITDA Margin", result["r2_ebitda"], "#F59E0B"),
+        ("NTM EBITDA Margin", result["r2_ebitda"], "#F59E0B"),
         ("Unexplained", result["r2_unexplained"], "#E5E7EB"),
     ]
     for label, val, color in segments:
@@ -948,31 +1009,41 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
     )
     st.markdown("---")
 
-    # ── Filters ───────────────────────────────────────────────────────────────
-    f1, f2, f3, f4 = st.columns([2, 2, 2, 1])
-    all_cats = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
-    with f1:
-        sel_cats = st.multiselect(
-            "CATEGORY", options=all_cats, default=all_cats,
-            key=f"r2_cats_{tab_key}",
-        )
-    with f2:
+    # ── Category checkboxes ──────────────────────────────────────────────────
+    all_cats = list(SEGMENT_SHORT.values())
+    st.markdown(
+        '<div style="font-size:9px;font-weight:600;color:#94A3B8;'
+        'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">'
+        'CATEGORIES</div>',
+        unsafe_allow_html=True,
+    )
+    _r2_cat_cols = st.columns(len(all_cats))
+    sel_cats = []
+    for i, cat in enumerate(all_cats):
+        with _r2_cat_cols[i]:
+            if st.checkbox(cat, value=True, key=f"r2_cat_{tab_key}_{i}"):
+                sel_cats.append(cat)
+
+    # ── Filters row ──────────────────────────────────────────────────────────
+    _rf1, _rf2, _rf3 = st.columns([2, 2, 2])
+    with _rf1:
         _tv_all = list(TEV_BANDS.keys())
         r2_tev_sel = st.multiselect(
             "TEV", _tv_all, default=_tv_all,
             key=f"r2_tev_{tab_key}",
         )
-    with f3:
+    with _rf2:
         _gr_all = list(GROWTH_BANDS.keys())
         r2_growth_sel = st.multiselect(
             "GROWTH", _gr_all, default=_gr_all,
             key=f"r2_gr_{tab_key}",
         )
-    with f4:
+    with _rf3:
         remove_outliers = st.checkbox(
-            "REMOVE OUTLIERS (5%)",
+            "REMOVE OUTLIERS",
             value=True,
             key=f"r2_out_{tab_key}",
+            help="Removes companies with metrics beyond the 5th/95th percentile to reduce distortion from extreme values.",
         )
 
     # ── Build regression dataframe from current snapshot ──────────────────────
@@ -1039,14 +1110,14 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Revenue Growth R²", f"{result['r2_growth']:.0%}")
     c2.metric("Gross Margin R²", f"{result['r2_gm']:.0%}")
-    c3.metric("EBITDA Margin R²", f"{result['r2_ebitda']:.0%}")
+    c3.metric("NTM EBITDA Margin R²", f"{result['r2_ebitda']:.0%}")
     c4.metric("Total R²", f"{result['r2_full']:.0%}")
 
     # Narrative
     drivers = {
         "Revenue Growth": result["r2_growth"],
         "Gross Margin": result["r2_gm"],
-        "EBITDA Margin": result["r2_ebitda"],
+        "NTM EBITDA Margin": result["r2_ebitda"],
     }
     top_driver = max(drivers, key=drivers.get)
     top_pct = drivers[top_driver]
@@ -1057,7 +1128,7 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
         f"All three factors together explain {result['r2_full']:.0%} of multiple dispersion — "
         f"the remaining {result['r2_unexplained']:.0%} reflects market sentiment, AI narrative, "
         f"sector rotation, and other qualitative factors. "
-        f"Attribution order: growth → gross margin → EBITDA margin (first variable gets credit "
+        f"Attribution order: growth → gross margin → NTM EBITDA margin (first variable gets credit "
         f"for shared explanatory power)."
     )
 
@@ -1080,7 +1151,7 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
             "Base multiple when all factors = 0",
             f"Each 1pp of growth adds {model.params.iloc[1]:.3f}x to the multiple",
             f"Each 1pp of gross margin adds {model.params.iloc[2]:.3f}x",
-            f"Each 1pp of EBITDA margin adds {model.params.iloc[3]:.3f}x",
+            f"Each 1pp of NTM EBITDA margin adds {model.params.iloc[3]:.3f}x",
         ],
     })
     st.dataframe(coef_df, use_container_width=True, hide_index=True)
@@ -1279,7 +1350,7 @@ def _render_r2_decomposition(all_data, daily_mult, tab_key):
     )
     st.caption(
         f"**Growth Correlation**: NTM EV/Revenue vs. NTM Revenue Growth alone. "
-        f"**Growth + Profitability Correlation**: NTM EV/Revenue vs. NTM Revenue Growth + EBITDA Margin. "
+        f"**Growth + Profitability Correlation**: NTM EV/Revenue vs. NTM Revenue Growth + NTM EBITDA Margin. "
         f"When the gap between the two lines widens, the market is placing more weight on "
         f"profitability alongside growth. {_method_note} Source: FactSet estimates."
     )

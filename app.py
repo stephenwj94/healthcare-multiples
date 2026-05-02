@@ -288,6 +288,9 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 pg = st.navigation({
+    "Home": [
+        st.Page("views/00_Home.py",                    title="Home",                  icon=":material/home:", default=True),
+    ],
     "Overview": [
         st.Page("views/01_Winners_and_Losers.py",     title="Winners & Losers",        icon=":material/trending_up:"),
         st.Page("views/02_Valuation_Lookback.py",     title="Valuation Lookback",      icon=":material/history:"),
@@ -295,11 +298,11 @@ pg = st.navigation({
     ],
     "Comps": [
         st.Page("views/04_Comps_Table.py",     title="Comps Table",             icon=":material/table_chart:"),
+        st.Page("views/12_Comp_Set_Builder.py",      title="Comp Set Builder",      icon=":material/group_work:"),
         st.Page("views/13_Company.py",         title="Company Profile",         icon=":material/account_circle:"),
     ],
     "Analysis": [
         st.Page("views/11_Scenario_Screener.py",     title="Scenario Screener",     icon=":material/filter_alt:"),
-        st.Page("views/12_Comp_Set_Builder.py",      title="Comp Set Builder",      icon=":material/group_work:"),
         st.Page("views/15_Broker_Consensus.py",      title="Broker Consensus",      icon=":material/price_check:"),
     ],
     "News": [

@@ -219,8 +219,6 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
         "letter-spacing:0.14em;color:#3B82F6;margin-bottom:3px;'>Healthcare Multiples</div>"
         "<div style='font-size:14px;font-weight:600;color:#F1F5F9;'>"
         "Market Screening</div>"
-        "<div style='font-size:10.5px;color:#64748B;font-weight:500;margin-top:2px;"
-        "letter-spacing:0.02em;'>Healthcare Investments</div>"
         "</div>"
         "</div>",
         unsafe_allow_html=True,

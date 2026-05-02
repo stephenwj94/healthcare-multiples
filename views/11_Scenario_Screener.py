@@ -1,5 +1,5 @@
 """
-pages/drafts/scenario_screener.py — Scenario Screener
+pages/drafts/scenario_screener.py -- Scenario Screener
 Multi-condition filter engine for the healthcare universe.
 Up to 6 filter rows (metric / operator / value), 5 preset screens,
 results as count + comps table + optional scatter.
@@ -38,37 +38,20 @@ st.markdown("""
     padding-right:2rem!important;
     font-family:'DM Sans',sans-serif!important;
 }
-.ss-card {
-    background:white;
-    border:1px solid #E5E7EB;
-    border-radius:12px;
-    padding:16px 20px;
-    box-shadow:0 1px 3px rgba(0,0,0,0.04);
-    margin-bottom:16px;
-}
-.ss-result-count {
-    font-size:32px;
-    font-weight:700;
-    color:#111827;
-    font-variant-numeric:tabular-nums;
-}
-.ss-result-label {
-    font-size:12px;
-    color:#9CA3AF;
-    text-transform:uppercase;
-    letter-spacing:0.05em;
-}
 </style>
 """, unsafe_allow_html=True)
 
+# -- Page header with clear explanation ----------------------------------------
+st.title("Scenario Screener")
 st.markdown(
-    '<div style="font-size:22px;font-weight:700;color:#111827;margin-bottom:2px;">Scenario Screener</div>'
-    '<div style="font-size:12px;color:#94A3B8;margin-bottom:16px;">'
-    'Filter the healthcare universe by up to 6 conditions</div>',
+    '<p style="color:#64748B;font-size:14px;margin:-4px 0 18px 0;">'
+    "Screen the full healthcare universe using up to 6 custom filters. "
+    "Choose a preset or build your own criteria below, then view matched "
+    "companies in the results table and scatter plot.</p>",
     unsafe_allow_html=True,
 )
 
-# ── Data ───────────────────────────────────────────────────────────────────────
+# -- Data ----------------------------------------------------------------------
 db = DBManager(DB_PATH)
 
 @st.cache_data(ttl=60)
@@ -94,13 +77,13 @@ df_all["chg_2m_pct"]     = df_all["price_change_2m"].mul(100)
 df_all["tev_bn"]         = df_all["enterprise_value"].div(1e9)
 df_all["mcap_bn"]        = df_all["market_cap"].div(1e9)
 
-# ── Metric definitions ─────────────────────────────────────────────────────────
+# -- Metric definitions --------------------------------------------------------
 # (display name, column name, type, unit)
 METRICS: dict[str, tuple[str, str, str]] = {
     "NTM EV/Revenue (x)":       ("ntm_tev_rev",     "numeric", "x"),
     "NTM EV/EBITDA (x)":        ("ntm_tev_ebitda",  "numeric", "x"),
     "NTM Revenue Growth (%)":   ("rev_growth_pct",  "numeric", "%"),
-    "EBITDA Margin (%)":        ("ebitda_mgn_pct",  "numeric", "%"),
+    "NTM EBITDA Margin (%)":    ("ebitda_mgn_pct",  "numeric", "%"),
     "Gross Margin (%)":         ("gross_mgn_pct",   "numeric", "%"),
     "Enterprise Value ($B)":    ("tev_bn",           "numeric", "B"),
     "Market Cap ($B)":          ("mcap_bn",          "numeric", "B"),
@@ -109,34 +92,35 @@ METRICS: dict[str, tuple[str, str, str]] = {
     "Segment":                  ("seg_label",        "category", ""),
 }
 
-NUMERIC_OPS  = [">", "≥", "<", "≤", "between"]
+NUMERIC_OPS  = [">", "\u2265", "<", "\u2264", "between"]
 CATEGORY_OPS = ["equals", "not equals"]
 
-# ── Preset screens ─────────────────────────────────────────────────────────────
+# -- Preset screens ------------------------------------------------------------
 PRESETS: dict[str, list[dict]] = {
     "(none)": [],
     "Undervalued Growth": [
         {"metric": "NTM EV/Revenue (x)",       "op": "<",  "val": 10.0},
-        {"metric": "NTM Revenue Growth (%)",   "op": "≥",  "val": 20.0},
+        {"metric": "NTM Revenue Growth (%)",   "op": "\u2265",  "val": 20.0},
     ],
     "Cash Cows": [
-        {"metric": "EBITDA Margin (%)",         "op": "≥",  "val": 20.0},
-        {"metric": "Gross Margin (%)",          "op": "≥",  "val": 70.0},
+        {"metric": "NTM EBITDA Margin (%)",     "op": "\u2265",  "val": 20.0},
+        {"metric": "Gross Margin (%)",          "op": "\u2265",  "val": 70.0},
     ],
     "High Growth (>30%)": [
-        {"metric": "NTM Revenue Growth (%)",    "op": "≥",  "val": 30.0},
+        {"metric": "NTM Revenue Growth (%)",    "op": "\u2265",  "val": 30.0},
     ],
     "Large Cap Cheap": [
-        {"metric": "Enterprise Value ($B)",     "op": "≥",  "val": 5.0},
+        {"metric": "Enterprise Value ($B)",     "op": "\u2265",  "val": 5.0},
         {"metric": "NTM EV/Revenue (x)",        "op": "<",  "val": 8.0},
     ],
 }
 
-# ── Filter UI ──────────────────────────────────────────────────────────────────
-st.markdown('<div class="ss-card">', unsafe_allow_html=True)
+# -- Filter UI -----------------------------------------------------------------
+st.markdown("**Preset Screens** -- select a preset to auto-populate filters, or leave as (none) to build from scratch.")
 preset_col, _ = st.columns([3, 7])
 with preset_col:
-    preset_choice = st.selectbox("Load preset screen", list(PRESETS.keys()), index=0)
+    preset_choice = st.selectbox("Load preset screen", list(PRESETS.keys()), index=0,
+                                 label_visibility="collapsed")
 
 preset_filters = PRESETS[preset_choice]
 MAX_FILTERS = 6
@@ -153,6 +137,22 @@ current_filters: list[dict] = st.session_state["ss_filters"]
 # Ensure at least one filter row
 if not current_filters:
     current_filters = [{}]
+
+st.markdown("---")
+st.markdown("**Filter Conditions**")
+
+# Column headers for the filter rows
+hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5 = st.columns([3, 2, 2, 2, 1])
+with hdr_c1:
+    st.caption("Metric")
+with hdr_c2:
+    st.caption("Operator")
+with hdr_c3:
+    st.caption("Value")
+with hdr_c4:
+    st.caption("Upper bound (between)")
+with hdr_c5:
+    st.caption("")
 
 def _render_filter_row(idx: int, flt: dict) -> dict:
     c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1])
@@ -208,15 +208,10 @@ def _render_filter_row(idx: int, flt: dict) -> dict:
         else:
             st.empty()
     with c5:
-        remove = st.button("✕", key=f"ss_rm_{idx}", help="Remove this filter")
+        remove = st.button("Remove", key=f"ss_rm_{idx}", help="Remove this filter")
         result["_remove"] = remove
     return result
 
-st.markdown(
-    '<div style="font-size:12px;font-weight:600;color:#6B7280;'
-    'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Filters</div>',
-    unsafe_allow_html=True,
-)
 
 new_filters = []
 for i, f in enumerate(current_filters):
@@ -232,9 +227,8 @@ with add_col:
             new_filters.append({})
 
 st.session_state["ss_filters"] = new_filters
-st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Apply filters ──────────────────────────────────────────────────────────────
+# -- Apply filters -------------------------------------------------------------
 df_result = df_all.copy()
 
 for f in new_filters:
@@ -259,60 +253,42 @@ for f in new_filters:
             continue
         if op == ">":
             df_result = df_result[series > v]
-        elif op == "≥":
+        elif op == "\u2265":
             df_result = df_result[series >= v]
         elif op == "<":
             df_result = df_result[series < v]
-        elif op == "≤":
+        elif op == "\u2264":
             df_result = df_result[series <= v]
         elif op == "between":
             v2 = f.get("val2")
             if v2 is not None:
                 df_result = df_result[(series >= v) & (series <= float(v2))]
 
-# ── Results ────────────────────────────────────────────────────────────────────
+# -- Results -------------------------------------------------------------------
+st.markdown("---")
+st.markdown("**Results**")
+
 n_result = len(df_result)
 n_total  = len(df_all)
 
 rc1, rc2, rc3, rc4 = st.columns(4)
 with rc1:
-    st.markdown(f"""
-    <div class="ss-card" style="text-align:center;">
-      <div class="ss-result-count">{n_result}</div>
-      <div class="ss-result-label">Companies matched</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.metric("Companies Matched", n_result)
 with rc2:
     pct = n_result / n_total * 100 if n_total else 0
-    st.markdown(f"""
-    <div class="ss-card" style="text-align:center;">
-      <div class="ss-result-count">{pct:.0f}%</div>
-      <div class="ss-result-label">of universe</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.metric("% of Universe", f"{pct:.0f}%")
 with rc3:
     med_rev_x = df_result["ntm_tev_rev"].median()
-    st.markdown(f"""
-    <div class="ss-card" style="text-align:center;">
-      <div class="ss-result-count">{med_rev_x:.1f}x</div>
-      <div class="ss-result-label">Median NTM EV/Rev</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.metric("Median NTM EV/Rev", f"{med_rev_x:.1f}x")
 with rc4:
     med_gr = df_result["rev_growth_pct"].median()
-    st.markdown(f"""
-    <div class="ss-card" style="text-align:center;">
-      <div class="ss-result-count">{med_gr:.0f}%</div>
-      <div class="ss-result-label">Median Rev Growth</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.metric("Median Rev Growth", f"{med_gr:.0f}%")
 
 if df_result.empty:
     st.warning("No companies match all applied filters.")
     st.stop()
 
-# ── Comps table ────────────────────────────────────────────────────────────────
-st.markdown("---")
+# -- Comps table ---------------------------------------------------------------
 st.markdown(
     '<div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">Matched Companies</div>',
     unsafe_allow_html=True,
@@ -326,7 +302,7 @@ display_cols = {
     "ntm_tev_rev":   "NTM EV/Rev",
     "ntm_tev_ebitda":"NTM EV/EBITDA",
     "rev_growth_pct":"Rev Growth %",
-    "ebitda_mgn_pct":"EBITDA Mgn %",
+    "ebitda_mgn_pct":"NTM EBITDA Mgn %",
     "gross_mgn_pct": "Gross Mgn %",
 }
 disp_df = df_result[[c for c in display_cols if c in df_result.columns]].copy()
@@ -334,7 +310,7 @@ disp_df.columns = [display_cols[c] for c in disp_df.columns]
 
 def _fmt_cell(series, suffix="", decimals=1):
     return series.apply(
-        lambda v: f"{v:.{decimals}f}{suffix}" if pd.notna(v) else "—"
+        lambda v: f"{v:.{decimals}f}{suffix}" if pd.notna(v) else "\u2014"
     )
 
 if "NTM EV/Rev" in disp_df.columns:
@@ -343,17 +319,15 @@ if "NTM EV/EBITDA" in disp_df.columns:
     disp_df["NTM EV/EBITDA"]  = _fmt_cell(disp_df["NTM EV/EBITDA"], "x")
 if "TEV ($B)" in disp_df.columns:
     disp_df["TEV ($B)"]       = _fmt_cell(disp_df["TEV ($B)"], "B")
-for pct_col in ["Rev Growth %", "EBITDA Mgn %", "Gross Mgn %"]:
+for pct_col in ["Rev Growth %", "NTM EBITDA Mgn %", "Gross Mgn %"]:
     if pct_col in disp_df.columns:
         disp_df[pct_col] = _fmt_cell(disp_df[pct_col], "%", decimals=1)
 
 disp_df = disp_df.sort_values("TEV ($B)", ascending=False) if "TEV ($B)" in disp_df.columns else disp_df
 
-st.markdown('<div class="ss-card">', unsafe_allow_html=True)
 st.dataframe(disp_df, use_container_width=True, hide_index=True, height=340)
-st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Optional scatter ───────────────────────────────────────────────────────────
+# -- Optional scatter ----------------------------------------------------------
 if n_result >= 3:
     st.markdown("---")
     scat_col1, scat_col2, _ = st.columns([2, 2, 6])
@@ -366,18 +340,18 @@ if n_result >= 3:
     with scat_col2:
         y_opt = st.selectbox(
             "Scatter Y",
-            ["NTM Revenue Growth %", "EBITDA Margin %"],
+            ["NTM Revenue Growth %", "NTM EBITDA Margin %"],
             key="ss_scatter_y",
         )
 
     _x_map = {"NTM EV/Revenue": "NTM Rev x", "NTM EV/EBITDA": "NTM EBITDA x"}
     _y_map = {
         "NTM Revenue Growth %": "NTM Rev Growth",
-        "EBITDA Margin %":       "EBITDA Margin",
+        "NTM EBITDA Margin %":  "EBITDA Margin",
     }
     _y_sfx_map = {
         "NTM Revenue Growth %": "%",
-        "EBITDA Margin %":       "%",
+        "NTM EBITDA Margin %":  "%",
     }
 
     scatter_records = df_result.to_dict("records")
@@ -395,8 +369,6 @@ if n_result >= 3:
         y_suffix=_y_sfx_map[y_opt],
     )
     if fig:
-        st.markdown('<div class="ss-card">', unsafe_allow_html=True)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.caption("Not enough data for scatter.")

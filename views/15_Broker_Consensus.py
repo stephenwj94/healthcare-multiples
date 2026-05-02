@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import html as _html_lib
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -157,47 +158,90 @@ _COMPANY_MAP = {}
 for c in COMPANY_REGISTRY:
     _COMPANY_MAP[c["ticker"]] = c
 
-# ── Data fetching (cached 6 hours) ─────────────────────────────────────────
+# ── Parallel data fetching (cached 24 hours) ─────────────────────────────
 
-@st.cache_data(ttl=6 * 3600, show_spinner="Fetching analyst consensus data...")
+
+def _fetch_single_company(company: dict) -> dict:
+    """Fetch analyst data for a single company with a 3-second timeout guard."""
+    ticker = company["ticker"]
+    yahoo_ticker = company.get("yahoo_ticker", ticker)
+    empty_row = {
+        "ticker": ticker,
+        "yahoo_ticker": yahoo_ticker,
+        "name": company["name"],
+        "segment": company["segment"],
+        "currentPrice": None,
+        "targetLowPrice": None,
+        "targetMeanPrice": None,
+        "targetMedianPrice": None,
+        "targetHighPrice": None,
+        "numberOfAnalystOpinions": None,
+        "recommendationKey": None,
+    }
+    try:
+        info = yf.Ticker(yahoo_ticker).info
+        return {
+            **empty_row,
+            "currentPrice": info.get("currentPrice") or info.get("regularMarketPrice"),
+            "targetLowPrice": info.get("targetLowPrice"),
+            "targetMeanPrice": info.get("targetMeanPrice"),
+            "targetMedianPrice": info.get("targetMedianPrice"),
+            "targetHighPrice": info.get("targetHighPrice"),
+            "numberOfAnalystOpinions": info.get("numberOfAnalystOpinions"),
+            "recommendationKey": info.get("recommendationKey"),
+        }
+    except Exception:
+        return empty_row
+
+
+@st.cache_data(ttl=24 * 3600, show_spinner=False)
 def fetch_analyst_data() -> pd.DataFrame:
-    """Fetch analyst price targets for all companies via yfinance."""
-    rows = []
-    for company in COMPANY_REGISTRY:
-        ticker = company["ticker"]
-        yahoo_ticker = company.get("yahoo_ticker", ticker)
-        try:
-            info = yf.Ticker(yahoo_ticker).info
-            row = {
-                "ticker": ticker,
-                "yahoo_ticker": yahoo_ticker,
-                "name": company["name"],
-                "segment": company["segment"],
-                "currentPrice": info.get("currentPrice") or info.get("regularMarketPrice"),
-                "targetLowPrice": info.get("targetLowPrice"),
-                "targetMeanPrice": info.get("targetMeanPrice"),
-                "targetMedianPrice": info.get("targetMedianPrice"),
-                "targetHighPrice": info.get("targetHighPrice"),
-                "numberOfAnalystOpinions": info.get("numberOfAnalystOpinions"),
-                "recommendationKey": info.get("recommendationKey"),
-            }
-            rows.append(row)
-        except Exception:
-            rows.append({
-                "ticker": ticker,
-                "yahoo_ticker": yahoo_ticker,
-                "name": company["name"],
-                "segment": company["segment"],
-                "currentPrice": None,
-                "targetLowPrice": None,
-                "targetMeanPrice": None,
-                "targetMedianPrice": None,
-                "targetHighPrice": None,
-                "numberOfAnalystOpinions": None,
-                "recommendationKey": None,
-            })
-    df = pd.DataFrame(rows)
-    return df
+    """Fetch analyst price targets for all companies via yfinance in parallel."""
+    rows: list[dict] = []
+    total = len(COMPANY_REGISTRY)
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    status_text.markdown(
+        f'<div style="font-size:12px;color:#94A3B8;">'
+        f'Fetching analyst consensus data for {total} companies...</div>',
+        unsafe_allow_html=True,
+    )
+
+    completed = 0
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_company = {
+            executor.submit(_fetch_single_company, company): company
+            for company in COMPANY_REGISTRY
+        }
+        for future in as_completed(future_to_company, timeout=180):
+            try:
+                result = future.result(timeout=3)
+                rows.append(result)
+            except Exception:
+                # Graceful degradation: skip companies that fail or time out
+                company = future_to_company[future]
+                rows.append({
+                    "ticker": company["ticker"],
+                    "yahoo_ticker": company.get("yahoo_ticker", company["ticker"]),
+                    "name": company["name"],
+                    "segment": company["segment"],
+                    "currentPrice": None,
+                    "targetLowPrice": None,
+                    "targetMeanPrice": None,
+                    "targetMedianPrice": None,
+                    "targetHighPrice": None,
+                    "numberOfAnalystOpinions": None,
+                    "recommendationKey": None,
+                })
+            completed += 1
+            progress_bar.progress(completed / total)
+
+    # Clear progress indicators once done
+    progress_bar.empty()
+    status_text.empty()
+
+    return pd.DataFrame(rows)
 
 
 df_analyst = fetch_analyst_data()
@@ -661,7 +705,7 @@ else:
 st.markdown(
     '<div class="bc-source">'
     'Source: Yahoo Finance analyst consensus estimates. Price targets and recommendations '
-    'reflect the latest available broker coverage. Data refreshed every 6 hours.'
+    'reflect the latest available broker coverage. Data refreshed every 24 hours.'
     '</div>',
     unsafe_allow_html=True,
 )

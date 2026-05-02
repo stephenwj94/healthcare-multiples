@@ -22,7 +22,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from components.sidebar import render_sidebar
 from components.logos import logo_img_tag
-from config.settings import DB_PATH, EXCEL_OVERRIDE_PATH
+from config.settings import DB_PATH, EXCEL_OVERRIDE_PATH, SEGMENT_DISPLAY
 from config.color_palette import (
     SEGMENT_SHORT, SEG_COLOR_MAP, SEGMENT_COLORS,
     BADGE_STYLES, LIGHT_BADGE_STYLES,
@@ -31,6 +31,8 @@ from config.color_palette import (
 )
 from fetcher.db_manager import DBManager
 from fetcher.excel_override import load_overrides, apply_overrides
+
+IS_LIGHT = True
 
 # ── Force full-width layout + DM Sans font ──────────────────────────────────
 # Structure-only CSS (no colors — dark/light colors injected below after IS_LIGHT check)
@@ -143,7 +145,7 @@ if raw_dates:
 _date_suffix = ""
 if latest_date_str:
     _date_suffix = (
-        f'&nbsp;&nbsp;·&nbsp;&nbsp;<span style="color:#9CA3AF;">'
+        f'&nbsp;&nbsp;&middot;&nbsp;&nbsp;<span style="color:#9CA3AF;">'
         f'Data as of {latest_date_str}</span>'
     )
 # NOTE: page title rendered conditionally at bottom based on _page_view toggle
@@ -281,8 +283,11 @@ _WL_CAT_PILLS = {
     "Consumer Health": f"background:#E6F4EE; color:#047857; {_WL_CAT_BASE}",
     "MedTech":         f"background:#FCEAEA; color:#B91C1C; {_WL_CAT_BASE}",
     "Life Sci Tools":  f"background:#F1EAFB; color:#6D28D9; {_WL_CAT_BASE}",
+    "LST / Dx":        f"background:#F1EAFB; color:#6D28D9; {_WL_CAT_BASE}",
     "Services":        f"background:#FEF3E2; color:#B45309; {_WL_CAT_BASE}",
+    "Asset-Light Services": f"background:#FEF3E2; color:#B45309; {_WL_CAT_BASE}",
     "CDMOs":           f"background:#FDECE0; color:#C2410C; {_WL_CAT_BASE}",
+    "Asset-Heavy Services": f"background:#FDECE0; color:#C2410C; {_WL_CAT_BASE}",
     "Health Tech":     f"background:#E2F1F5; color:#0E7490; {_WL_CAT_BASE}",
 }
 _WL_CAT_DEFAULT = f"background:#F1F5F9; color:#64748B; {_WL_CAT_BASE}"
@@ -307,15 +312,15 @@ def _wl_ticker(val):
     return f'<td class="wl-lt">{logo_html}<span class="wl-tkr">{t}</span></td>'
 
 def _wl_company(val):
-    full  = str(val or "–")
-    short = (full[:21] + "…") if len(full) > 22 else full
+    full  = str(val or "\u2013")
+    short = (full[:21] + "\u2026") if len(full) > 22 else full
     esc   = _html_lib.escape(short)
     return f'<td class="wl-lt" style="color:#374151;">{esc}</td>'
 
 def _wl_category(val):
     cat = str(val) if val else ""
     sty = _WL_CAT_PILLS.get(cat, _WL_CAT_DEFAULT)
-    esc = _html_lib.escape(cat) if cat else "–"
+    esc = _html_lib.escape(cat) if cat else "\u2013"
     return f'<td class="wl-lt"><span style="{sty}">{esc}</span></td>'
 
 def _wl_tev(val):
@@ -331,7 +336,7 @@ def _wl_tev(val):
     return f'<td class="wl-rt">${v / 1e6:.0f}M</td>'
 
 def _wl_mult(val):
-    """NTM Rev x or NTM EBITDA x — already in multiple units (e.g. 5.4)."""
+    """NTM Rev x or NTM EBITDA x -- already in multiple units (e.g. 5.4)."""
     try:
         v = float(val)
     except (TypeError, ValueError):
@@ -373,7 +378,7 @@ def _wl_growth(val):
     )
 
 def _wl_chg_winner(val):
-    """val is raw decimal — multiply by 100 for %."""
+    """val is raw decimal -- multiply by 100 for %."""
     try:
         v = float(val) * 100
     except (TypeError, ValueError):
@@ -386,12 +391,12 @@ def _wl_chg_winner(val):
     pill = (
         f'<span style="display:inline-block;padding:2px 10px;border-radius:4px;'
         f'background:#F0FDF4;color:#16A34A;font-weight:600;font-size:11px;">'
-        f'▲ {v:.1f}%</span>'
+        f'\u25b2 {v:.1f}%</span>'
     )
     return f'<td class="wl-rt">{pill}</td>'
 
 def _wl_chg_loser(val):
-    """val is raw decimal — multiply by 100 for %."""
+    """val is raw decimal -- multiply by 100 for %."""
     try:
         v = float(val) * 100
     except (TypeError, ValueError):
@@ -404,7 +409,7 @@ def _wl_chg_loser(val):
     pill = (
         f'<span style="display:inline-block;padding:2px 10px;border-radius:4px;'
         f'background:#FEF2F2;color:#DC2626;font-weight:600;font-size:11px;">'
-        f'▼ ({abs(v):.1f}%)</span>'
+        f'\u25bc ({abs(v):.1f}%)</span>'
     )
     return f'<td class="wl-rt">{pill}</td>'
 
@@ -475,8 +480,8 @@ def _plotly_layout(title="", height=320):
         plot_bgcolor=PLOTLY_BG,
         paper_bgcolor=PLOTLY_BG,
         font=dict(family="DM Sans, sans-serif", color=PLOTLY_TEXT, size=11),
-        xaxis=dict(**_axis_defaults),   # independent copy — must not share with yaxis
-        yaxis=dict(**_axis_defaults),   # independent copy — must not share with xaxis
+        xaxis=dict(**_axis_defaults),   # independent copy
+        yaxis=dict(**_axis_defaults),   # independent copy
         margin=dict(l=50, r=20, t=40, b=40),
         height=height,
         legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0,
@@ -489,12 +494,7 @@ def _plotly_layout(title="", height=320):
 
 
 def _chart_breadth(hist_data, change_col):
-    """Line chart (or single bar) of % advancing per snapshot date.
-
-    Forces a categorical x-axis so dates show as 'Jan 13', 'Jan 27' etc.
-    rather than as a continuous datetime axis with hourly ticks.
-    Falls back to a single bar chart when only one snapshot exists.
-    """
+    """Line chart (or single bar) of % advancing per snapshot date."""
     if not hist_data:
         return None
 
@@ -513,7 +513,6 @@ def _chart_breadth(hist_data, change_col):
     groups["pct_adv"] = groups["adv"] / groups["total"] * 100
     groups = groups.sort_values("snapshot_date")
 
-    # Format dates as "Jan 13" for the x-axis labels
     def _fmt_date(ds):
         try:
             return datetime.strptime(str(ds)[:10], "%Y-%m-%d").strftime("%b %-d")
@@ -525,7 +524,6 @@ def _chart_breadth(hist_data, change_col):
     fig = go.Figure()
 
     if len(groups) == 1:
-        # Single snapshot: show as a bar with a note
         fig.add_trace(go.Bar(
             x=groups["date_label"], y=groups["pct_adv"],
             marker_color=GREEN,
@@ -545,13 +543,11 @@ def _chart_breadth(hist_data, change_col):
     layout = _plotly_layout("Breadth: % Advancing Over Time", height=196)
     layout["yaxis"]["ticksuffix"] = "%"
     layout["yaxis"]["range"] = [0, 100]
-    # Force categorical axis so dates are discrete ticks, not interpolated datetime
     layout["xaxis"]["type"] = "category"
     layout["xaxis"]["tickangle"] = 0
     layout["margin"]["r"] = 40
     fig.update_layout(**layout)
 
-    # "50%" label on the right side of the reference line
     fig.add_annotation(
         x=1, xref="paper", y=50, yref="y",
         text="50%", showarrow=False,
@@ -617,11 +613,11 @@ def _chart_by_category(valid, change_col):
 def _stat_card(label, value, sub="", delta_val=None, extra_html="", top_color="#4A90D9"):
     if delta_val is not None:
         if delta_val > 0:
-            delta_html = f'<div class="stat-delta-up">▲ {abs(delta_val):.1f}%</div>'
+            delta_html = f'<div class="stat-delta-up">\u25b2 {abs(delta_val):.1f}%</div>'
         elif delta_val < 0:
-            delta_html = f'<div class="stat-delta-down">▼ {abs(delta_val):.1f}%</div>'
+            delta_html = f'<div class="stat-delta-down">\u25bc {abs(delta_val):.1f}%</div>'
         else:
-            delta_html = f'<div class="stat-delta-neut">─ 0.0%</div>'
+            delta_html = f'<div class="stat-delta-neut">\u2500 0.0%</div>'
     else:
         delta_html = ""
 
@@ -634,7 +630,6 @@ def _stat_card(label, value, sub="", delta_val=None, extra_html="", top_color="#
   {sub_html}
   {extra_html}
 </div>"""
-
 
 
 
@@ -695,19 +690,13 @@ def _mp_fetch_prices(tickers_tuple):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _mp_fetch_index_prices():
-    """Download S&P 500, NASDAQ, and BVP Cloud index closes.
-
-    Returns (prices_dict, bvp_label_html) tuple.
-    BVP Emerging Cloud Index is not directly on Yahoo Finance; we proxy via
-    SKYY (First Trust Cloud Computing ETF) or WCLD (WisdomTree Cloud ETF).
-    """
+    """Download S&P 500, NASDAQ, and BVP Cloud index closes."""
     try:
         import yfinance as yf
     except ImportError:
         return {}, "BVP Cloud Index"
     start = (pd.Timestamp.today() - pd.DateOffset(months=14)).strftime("%Y-%m-%d")
     results = {}
-    # S&P 500 and NASDAQ
     for name, sym in [("S&P 500", "^GSPC"), ("NASDAQ", "^IXIC")]:
         try:
             hist = yf.Ticker(sym).history(start=start, auto_adjust=True)
@@ -716,7 +705,6 @@ def _mp_fetch_index_prices():
             results[name] = hist["Close"] if not hist.empty else None
         except Exception:
             results[name] = None
-    # BVP Emerging Cloud Index — try SKYY then WCLD as proxies
     bvp_label = "BVP Cloud Index"
     results["BVP Cloud"] = None
     for sym, proxy in [("SKYY", "SKYY"), ("WCLD", "WCLD")]:
@@ -790,7 +778,7 @@ def _mp_compute_index_returns(index_prices, as_of, periods):
 
 
 def _mp_availability(close_df, as_of, periods):
-    """Returns {period: bool} — True if historical data covers that period."""
+    """Returns {period: bool} -- True if historical data covers that period."""
     avail = {}
     as_of = pd.Timestamp(as_of)
     for period in periods:
@@ -805,7 +793,7 @@ def _mp_availability(close_df, as_of, periods):
 def _mp_fmt_pct(val, direction):
     """Return (text, color_hex, bg_css) for a pct value."""
     if val is None or (isinstance(val, float) and np.isnan(val)):
-        return "—", "#CBD5E1", "transparent"
+        return "\u2014", "#CBD5E1", "transparent"
     val = float(val)
     if val < 0:
         text  = f"({abs(val):.0f}%)"
@@ -821,7 +809,6 @@ def _mp_fmt_pct(val, direction):
 
 
 def _mp_winner_heat(v):
-    """Green heat map background for winner % Δ cell based on magnitude."""
     if v >= 100: return "rgba(22,163,74,0.22)"
     elif v >= 50: return "rgba(22,163,74,0.15)"
     elif v >= 30: return "rgba(22,163,74,0.10)"
@@ -830,7 +817,6 @@ def _mp_winner_heat(v):
 
 
 def _mp_loser_heat(v):
-    """Red heat map background for loser % Δ cell (v is negative)."""
     a = abs(v)
     if a >= 70: return "rgba(220,38,38,0.20)"
     elif a >= 50: return "rgba(220,38,38,0.14)"
@@ -840,7 +826,6 @@ def _mp_loser_heat(v):
 
 
 def _mp_bm_heat(v):
-    """Proportional heat map rgba for benchmark % Δ cells."""
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return "transparent"
     if v >= 0:
@@ -850,9 +835,8 @@ def _mp_bm_heat(v):
 
 
 def _mp_cell(val, direction):
-    """Format a % Δ cell for the movers table. Returns (text, color, heat_bg)."""
     if val is None or (isinstance(val, float) and np.isnan(val)):
-        return "—", "#CBD5E1", "transparent"
+        return "\u2014", "#CBD5E1", "transparent"
     v = float(val)
     text = f"({abs(v):.0f}%)" if v < 0 else f"{v:.0f}%"
     if direction == "winners":
@@ -865,9 +849,8 @@ def _mp_cell(val, direction):
 
 
 def _mp_bm_cell(val):
-    """Format a benchmark % Δ cell. Returns (text, color, heat_bg)."""
     if val is None or (isinstance(val, float) and np.isnan(val)):
-        return "—", "#CBD5E1", "transparent"
+        return "\u2014", "#CBD5E1", "transparent"
     v = float(val)
     text    = f"({abs(v):.0f}%)" if v < 0 else f"{v:.0f}%"
     color   = "#DC2626" if v < 0 else "#16A34A"
@@ -877,25 +860,19 @@ def _mp_bm_cell(val):
 
 def _render_combined_html(period_returns, period_avail, index_returns=None, sw_returns=None,
                           n=10, bvp_label="BVP Cloud Index"):
-    """
-    ONE table: Winners + Losers with perfect column alignment.
-    Features: dark frozen headers, heat map on % Δ, alternating column group backgrounds.
-    """
+    """ONE table: Winners + Losers with perfect column alignment."""
     periods  = _MP_PERIOD_NAMES
     n_period = len(periods)
-    n_cols   = 1 + n_period * 2   # 1 rank + 2 per period = 13
+    n_cols   = 1 + n_period * 2
 
     def _col_bg(pi):
-        """Alternating period-column-group background. Odd index → #F8FAFC."""
         return "#F8FAFC" if pi % 2 == 1 else "transparent"
 
-    # ── colgroup: 18px rank + (72px ticker + 52px % Δ) × 6 ─────────────────
     colgroup = '<colgroup><col style="width:18px;">'
     for _ in periods:
         colgroup += '<col style="width:72px;"><col style="width:52px;">'
     colgroup += '</colgroup>'
 
-    # ── thead: single clean row with period labels ──────────────────────────────
     head1 = (
         '<th style="'
         'width:18px;min-width:18px;'
@@ -925,11 +902,9 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
         f'</thead>'
     )
 
-    # ── data row builder ──────────────────────────────────────────────────────
     def _data_row(rank, sorted_returns_by_period, direction):
         tick_fw  = "700" if rank <= 3 else "500"
         tick_col = "#111827" if rank <= 3 else "#475569"
-        # Subtle gold highlight for #1 row
         rank_bg = "background:rgba(251,191,36,0.06);" if rank == 1 else ""
         rank_col = "#111827"
         row = (
@@ -945,9 +920,9 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
                 row += (
                     f'<td style="border-left:1.5px solid #E2E8F0;padding:5px 8px;'
                     f'background:{col_bg};border-bottom:1px solid #F3F4F6;'
-                    f'color:#CBD5E1;font-size:11px;">—</td>'
+                    f'color:#CBD5E1;font-size:11px;">\u2014</td>'
                     f'<td style="padding:5px 8px;background:{col_bg};'
-                    f'border-bottom:1px solid #F3F4F6;color:#CBD5E1;font-size:11px;">—</td>'
+                    f'border-bottom:1px solid #F3F4F6;color:#CBD5E1;font-size:11px;">\u2014</td>'
                 )
                 continue
             sorted_s = sorted_returns_by_period.get(p, pd.Series(dtype=float))
@@ -977,14 +952,13 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
                 row += (
                     f'<td style="border-left:1.5px solid #E2E8F0;padding:5px 8px;'
                     f'background:{col_bg};border-bottom:1px solid #F3F4F6;'
-                    f'color:#CBD5E1;font-size:11px;">—</td>'
+                    f'color:#CBD5E1;font-size:11px;">\u2014</td>'
                     f'<td style="padding:5px 8px;background:{col_bg};'
-                    f'border-bottom:1px solid #F3F4F6;color:#CBD5E1;font-size:11px;">—</td>'
+                    f'border-bottom:1px solid #F3F4F6;color:#CBD5E1;font-size:11px;">\u2014</td>'
                 )
         row += "</tr>"
         return row
 
-    # ── pre-sort returns for each period ──────────────────────────────────────
     winners_sorted = {
         p: period_returns.get(p, pd.Series(dtype=float)).sort_values(ascending=False)
         for p in periods
@@ -994,10 +968,8 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
         for p in periods
     }
 
-    # ── tbody ─────────────────────────────────────────────────────────────────
     tbody = "<tbody>"
 
-    # Winners section header — full-width accent bar
     tbody += (
         f'<tr><td colspan="{n_cols}" style="'
         f'padding:0;background:white;border-top:none;">'
@@ -1013,7 +985,6 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
     for rank in range(1, n + 1):
         tbody += _data_row(rank, winners_sorted, "winners")
 
-    # Losers section header — full-width accent bar
     tbody += (
         f'<tr><td colspan="{n_cols}" style="'
         f'padding:0;background:white;border-top:2px solid #E2E8F0;">'
@@ -1028,8 +999,6 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
     )
     for rank in range(1, n + 1):
         tbody += _data_row(rank, losers_sorted, "losers")
-
-    # (Benchmark rows removed — replaced by Plotly chart above the table)
 
     tbody += "</tbody>"
 
@@ -1054,27 +1023,41 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
     )
 
 
-def _render_benchmark_chart(index_prices, close_df, as_of):
-    """Plotly line chart: 4 indices rebased to 100, with period shading bands."""
+def _render_benchmark_chart(index_prices, close_df, as_of, data):
+    """Plotly line chart: individual segment lines + S&P/NASDAQ references, rebased to 100."""
     as_of = pd.Timestamp(as_of)
     start_12m = as_of - pd.DateOffset(months=12)
 
-    # Build rebased series for each benchmark
+    # Build a ticker -> segment mapping from data
+    ticker_segment = {}
+    for d in data:
+        t = d.get("ticker")
+        s = d.get("segment")
+        if t and s:
+            ticker_segment[t] = s
+
     series_map = {}
 
-    # 1. Healthcare Universe — average of all company prices, rebased
+    # Build per-segment equal-weighted price indices
     if not close_df.empty:
         hc_daily = close_df[(close_df.index >= start_12m) & (close_df.index <= as_of)]
         if not hc_daily.empty:
-            # Normalize each company to 100, then average
-            first_valid = hc_daily.bfill().iloc[0]
-            first_valid = first_valid.replace(0, np.nan)
-            normed = hc_daily.div(first_valid) * 100
-            hc_avg = normed.mean(axis=1).dropna()
-            if not hc_avg.empty:
-                series_map["Healthcare Universe"] = hc_avg
+            for seg_key, seg_name in SEGMENT_DISPLAY.items():
+                seg_tickers = [t for t, s in ticker_segment.items()
+                               if s == seg_key and t in hc_daily.columns]
+                if not seg_tickers:
+                    continue
+                seg_prices = hc_daily[seg_tickers]
+                first_valid = seg_prices.bfill().iloc[0]
+                first_valid = first_valid.replace(0, np.nan)
+                normed = seg_prices.div(first_valid) * 100
+                seg_avg = normed.mean(axis=1).dropna()
+                if not seg_avg.empty:
+                    short_name = SEGMENT_SHORT.get(seg_key, seg_name)
+                    series_map[short_name] = (seg_avg, SEGMENT_COLORS.get(seg_key, "#6B7280"), seg_key)
 
-    # 2. S&P 500, NASDAQ
+    # S&P 500, NASDAQ as references
+    ref_series = {}
     for name, display in [("S&P 500", "S&P 500"), ("NASDAQ", "NASDAQ")]:
         s = index_prices.get(name)
         if s is not None and not s.empty:
@@ -1082,96 +1065,91 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
             if not s.empty:
                 base = s.iloc[0]
                 if base and base != 0:
-                    series_map[display] = (s / base) * 100
+                    ref_series[display] = (s / base) * 100
 
-    if not series_map:
-        return
+    if not series_map and not ref_series:
+        return None, list(SEGMENT_DISPLAY.keys())
 
-    # Colors for each line
-    colors = {
-        "Healthcare Universe": "#F59E0B",  # orange
-        "S&P 500": "#6B7280",                     # gray
-        "NASDAQ": "#8B5CF6",                       # purple
-    }
+    return (series_map, ref_series, start_12m, as_of), list(series_map.keys())
+
+
+def _build_segment_chart(chart_data, visible_segments):
+    """Build and return the Plotly figure given pre-computed data and visibility."""
+    series_map, ref_series, start_12m, as_of = chart_data
 
     fig = go.Figure()
 
-    # Add line traces — S&P/NASDAQ as subtle thin lines, HC Universe bold
-    hover_names = {
-        "Healthcare Universe": "HC Index",
-    }
-    for name, s in series_map.items():
-        is_hc = name == "Healthcare Universe"
+    # Add reference lines first (faint)
+    ref_colors = {"S&P 500": "#9CA3AF", "NASDAQ": "#B0B7C3"}
+    for name, s in ref_series.items():
         fig.add_trace(go.Scatter(
             x=s.index, y=s.values,
             name=name,
             mode="lines",
-            line=dict(
-                color=colors.get(name, "#94A3B8"),
-                width=3 if is_hc else 1.5,
-            ),
-            opacity=1.0 if is_hc else 0.5,
-            hovertemplate=f"<b>{hover_names.get(name, name)}</b>: %{{y:.1f}}<extra></extra>",
+            line=dict(color=ref_colors.get(name, "#94A3B8"), width=1.5, dash="dot"),
+            opacity=0.4,
+            hovertemplate=f"<b>{name}</b>: %{{y:.1f}}<extra></extra>",
         ))
 
-    # Add horizontal baseline at 100
+    # Add segment lines
+    for seg_name, (seg_series, seg_color, seg_key) in series_map.items():
+        visible = seg_name in visible_segments
+        fig.add_trace(go.Scatter(
+            x=seg_series.index, y=seg_series.values,
+            name=seg_name,
+            mode="lines",
+            line=dict(color=seg_color, width=2.5),
+            opacity=1.0,
+            visible=True if visible else "legendonly",
+            hovertemplate=f"<b>{seg_name}</b>: %{{y:.1f}}<extra></extra>",
+        ))
+
     fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8", line_width=1, opacity=0.5)
 
-    # Annotate baseline
     fig.add_annotation(
         x=0, xref="paper", xanchor="right",
         y=100, text="100", showarrow=False, xshift=-6,
         font=dict(size=10, color="#94A3B8", family="DM Sans"),
     )
 
-    # End-of-line value labels — sort and spread to avoid overlap
-    label_items = sorted(
-        [(name, s.iloc[-1]) for name, s in series_map.items()],
-        key=lambda x: x[1],
-    )
+    # End-of-line labels for visible segment lines
+    visible_items = []
+    for seg_name, (seg_series, seg_color, _) in series_map.items():
+        if seg_name in visible_segments and not seg_series.empty:
+            visible_items.append((seg_name, float(seg_series.iloc[-1]), seg_color))
+    for name, s in ref_series.items():
+        if not s.empty:
+            visible_items.append((name, float(s.iloc[-1]), ref_colors.get(name, "#94A3B8")))
+
+    label_items = sorted(visible_items, key=lambda x: x[1])
     min_gap = 8
     adjusted_y = [item[1] for item in label_items]
     for i in range(1, len(adjusted_y)):
         if adjusted_y[i] - adjusted_y[i - 1] < min_gap:
             adjusted_y[i] = adjusted_y[i - 1] + min_gap
 
-    for (name, last_val), adj_y in zip(label_items, adjusted_y):
-        color = colors.get(name, "#94A3B8")
-        short_name = hover_names.get(name, name)
+    for (name, last_val, color), adj_y in zip(label_items, adjusted_y):
         fig.add_annotation(
             x=1.0, xref="paper", xanchor="left",
             y=adj_y,
-            text=f"<b>{short_name}  {last_val:.0f}</b>",
+            text=f"<b>{name}  {last_val:.0f}</b>",
             showarrow=False,
             xshift=10,
-            font=dict(
-                size=13,
-                color="white",
-                family="DM Sans",
-            ),
+            font=dict(size=11, color="white", family="DM Sans"),
             bgcolor=color,
-            borderpad=8,
+            borderpad=6,
             bordercolor=color,
             borderwidth=1,
             opacity=1.0,
         )
 
     fig.update_layout(
-        height=380,
-        margin=dict(l=40, r=170, t=10, b=40),
+        height=400,
+        margin=dict(l=40, r=180, t=10, b=40),
         plot_bgcolor="white",
         paper_bgcolor="white",
         font=dict(family="DM Sans, sans-serif"),
         showlegend=False,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0,
-            font=dict(size=12, color="#374151"),
-            bgcolor="rgba(255,255,255,0)",
-        ),
         xaxis=dict(
             showgrid=False,
             tickformat="%b '%y",
@@ -1211,7 +1189,7 @@ def render_multi_period_view(data):
     as_of = (max(pd.Timestamp(str(d)[:10]) for d in raw_dates)
              if raw_dates else pd.Timestamp.today().normalize())
 
-    with st.spinner("Loading price history from Yahoo Finance…"):
+    with st.spinner("Loading price history from Yahoo Finance\u2026"):
         close_df     = _mp_fetch_prices(tuple(tickers))
         index_prices, bvp_label = _mp_fetch_index_prices()
 
@@ -1226,17 +1204,30 @@ def render_multi_period_view(data):
         s = period_returns.get(p, pd.Series(dtype=float)).dropna()
         sw_returns[p] = float(s.mean()) if not s.empty else None
 
-    # ── Benchmark chart ────────────────────────────────────────────────────────
-    chart_fig = _render_benchmark_chart(index_prices, close_df, as_of)
-    if chart_fig:
+    # ── Benchmark chart with segment lines ────────────────────────────────────
+    chart_result, all_seg_names = _render_benchmark_chart(index_prices, close_df, as_of, data)
+
+    if chart_result:
         st.markdown(
             '<div style="font-size:16px;font-weight:700;color:#111827;'
-            'margin-bottom:4px;margin-top:8px;">Index / Benchmark Performance</div>'
+            'margin-bottom:2px;margin-top:8px;">Share Price Performance</div>'
             '<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">'
             'Rebased to 100 at 12 months ago</div>',
             unsafe_allow_html=True,
         )
-        st.plotly_chart(chart_fig, use_container_width=True, config={"displayModeBar": False})
+
+        # Segment visibility checkboxes
+        cols = st.columns(len(all_seg_names))
+        visible_segments = []
+        for i, seg_name in enumerate(all_seg_names):
+            with cols[i]:
+                checked = st.checkbox(seg_name, value=True, key=f"seg_vis_{seg_name}")
+                if checked:
+                    visible_segments.append(seg_name)
+
+        chart_fig = _build_segment_chart(chart_result, visible_segments)
+        st.plotly_chart(chart_fig, use_container_width=True,
+                        config={"displayModeBar": False, "scrollZoom": False})
 
     # ── Single combined table ─────────────────────────────────────────────────
     st.markdown(
@@ -1247,13 +1238,13 @@ def render_multi_period_view(data):
     # ── Footnote ──────────────────────────────────────────────────────────────
     unavail = [p for p, a in period_avail.items() if not a]
     unavail_note = (
-        f" · Grayed periods ({', '.join(unavail)}) need more price history"
+        f" \u00b7 Grayed periods ({', '.join(unavail)}) need more price history"
         if unavail else ""
     )
     st.markdown(
         f'<div style="font-size:9px;color:#B0B7C3;margin-top:10px;padding-left:4px;">'
-        f'<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (share prices) · FactSet (fundamentals) · As of {as_of.strftime("%b %d, %Y")} · '
-        f'HC Index = simple avg return across healthcare universe'
+        f'<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (share prices) \u00b7 FactSet (fundamentals) \u00b7 As of {as_of.strftime("%b %d, %Y")} \u00b7 '
+        f'Segment lines = equal-weighted price index per segment'
         f'{unavail_note}</div>',
         unsafe_allow_html=True,
     )
@@ -1264,7 +1255,7 @@ def render_multi_period_view(data):
 # ── Stat card renderer (standalone) ──────────────────────────────────────────
 
 def _render_stat_cards(data, change_col):
-    """Render the 6 stat-card row — all performance-focused."""
+    """Render the 6 stat-card row -- all performance-focused, with color-coded percentages."""
     valid = [d for d in data if d.get(change_col) is not None]
     if not valid:
         return
@@ -1291,7 +1282,7 @@ def _render_stat_cards(data, change_col):
 
     sentiment_label = "Bullish" if median_chg >= 0 else "Bearish"
 
-    # Radial gauge for Adv / Dec — green = advancing, red = declining
+    # Radial gauge for Adv / Dec
     r = 44
     circ = 2 * 3.14159 * r
     green_arc = circ * pct_adv / 100
@@ -1324,14 +1315,15 @@ def _render_stat_cards(data, change_col):
         f'{sentiment_label}</span>'
     )
 
-    median_color = GREEN if median_chg >= 0 else RED
+    # Color-coded median change
+    median_color = "#059669" if median_chg >= 0 else "#DC2626"
     median_fmt = (
-        f'<span style="color:{median_color};">'
+        f'<span style="color:{median_color};font-size:34px;font-weight:800;">'
         + (f"+{median_chg:.1f}%" if median_chg >= 0 else f"-{abs(median_chg):.1f}%")
         + '</span>'
     )
 
-    # Best performer card content — show company name
+    # Best performer card content
     best_logo = logo_img_tag(best_ticker, size=20)
     best_logo_html = f'{best_logo}&nbsp;' if best_logo else ''
     best_pct = max_gain
@@ -1339,7 +1331,7 @@ def _render_stat_cards(data, change_col):
     best_val_html = (
         f'<div style="display:flex;align-items:center;gap:8px;justify-content:start;">'
         f'{best_logo_html}'
-        f'<span style="font-size:28px;font-weight:800;color:{GREEN};">'
+        f'<span style="font-size:28px;font-weight:800;color:#059669;">'
         f'+{best_pct:.1f}%</span>'
         f'</div>'
         f'<div style="font-size:14px;font-weight:700;color:#111827;margin-top:4px;">'
@@ -1347,7 +1339,7 @@ def _render_stat_cards(data, change_col):
         f'<div style="font-size:11px;color:#6B7280;margin-top:1px;">{best_ticker}</div>'
     )
 
-    # Worst performer card content — show company name
+    # Worst performer card content
     worst_logo = logo_img_tag(worst_ticker, size=20)
     worst_logo_html = f'{worst_logo}&nbsp;' if worst_logo else ''
     worst_pct = abs(max_loss)
@@ -1355,7 +1347,7 @@ def _render_stat_cards(data, change_col):
     worst_val_html = (
         f'<div style="display:flex;align-items:center;gap:8px;justify-content:start;">'
         f'{worst_logo_html}'
-        f'<span style="font-size:28px;font-weight:800;color:{RED};">'
+        f'<span style="font-size:28px;font-weight:800;color:#DC2626;">'
         f'-{worst_pct:.1f}%</span>'
         f'</div>'
         f'<div style="font-size:14px;font-weight:700;color:#111827;margin-top:4px;">'
@@ -1366,7 +1358,7 @@ def _render_stat_cards(data, change_col):
     adv_top_color    = GREEN if pct_adv >= 50 else RED
     median_top_color = GREEN if median_chg >= 0 else RED
 
-    # Universe card — clickable to show all tracked companies
+    # Universe card
     from config.company_registry import COMPANY_REGISTRY
     all_names = sorted([c["name"] for c in COMPANY_REGISTRY])
     names_list_html = "".join(
@@ -1412,64 +1404,108 @@ def _render_stat_cards(data, change_col):
     st.markdown(cards_html, unsafe_allow_html=True)
 
 
-# ── Compact detail table helpers ──────────────────────────────────────────────
+# ── Distribution chart ───────────────────────────────────────────────────────
 
-_DETAIL_CAT_ABBREV = {
-    "Pharma":          ("Pharma",  "#2563EB"),
-    "Consumer Health": ("CH",      "#059669"),
-    "MedTech":         ("MedTech", "#DC2626"),
-    "Life Sci Tools":  ("LST",     "#7C3AED"),
-    "Services":        ("Svcs",    "#F59E0B"),
-    "CDMOs":           ("CDMO",    "#EA580C"),
-    "Health Tech":     ("HCIT",    "#0891B2"),
-}
+def _render_distribution_chart(data, change_col):
+    """Stacked bar chart showing distribution of stock performance in buckets."""
+    valid = [d for d in data if d.get(change_col) is not None]
+    if not valid:
+        return
 
-_DETAIL_CSS = """
+    changes = [d[change_col] * 100 for d in valid]
+
+    # Define buckets
+    bucket_labels = ["Down >10%", "-10% to -5%", "-5% to 0%", "0% to +5%", "+5% to +10%", "Up >10%"]
+    bucket_colors = ["#DC2626", "#EF4444", "#FCA5A5", "#86EFAC", "#22C55E", "#059669"]
+
+    counts = [0] * 6
+    for c in changes:
+        if c < -10:
+            counts[0] += 1
+        elif c < -5:
+            counts[1] += 1
+        elif c < 0:
+            counts[2] += 1
+        elif c < 5:
+            counts[3] += 1
+        elif c < 10:
+            counts[4] += 1
+        else:
+            counts[5] += 1
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=bucket_labels,
+        y=counts,
+        marker_color=bucket_colors,
+        text=[str(c) for c in counts],
+        textposition="outside",
+        textfont=dict(size=12, color="#374151", family="DM Sans"),
+        hovertemplate="<b>%{x}</b><br>%{y} companies<extra></extra>",
+    ))
+
+    period_label = "2-Week" if "2w" in change_col else "2-Month"
+    fig.update_layout(
+        title=dict(
+            text=f"{period_label} Price Change Distribution",
+            font=dict(size=14, color="#374151", family="DM Sans"),
+        ),
+        height=280,
+        margin=dict(l=40, r=20, t=50, b=40),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="DM Sans, sans-serif", color="#64748B", size=11),
+        xaxis=dict(
+            showgrid=False,
+            linecolor="#E5E7EB",
+            tickfont=dict(size=11, color="#6B7280"),
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="#F3F4F6",
+            linecolor="#E5E7EB",
+            tickfont=dict(size=10, color="#9CA3AF"),
+            title="Number of Companies",
+            titlefont=dict(size=11, color="#9CA3AF"),
+        ),
+        bargap=0.15,
+    )
+
+    st.plotly_chart(fig, use_container_width=True,
+                    config={"displayModeBar": False, "scrollZoom": False})
+
+
+# ── Combined Winners & Losers table (new single-table design) ────────────────
+
+_COMBINED_CSS = """
 <style>
-.dt-outer {
+.comb-outer {
     background: white;
     border: 1px solid #E5E7EB;
     border-radius: 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: hidden;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    -webkit-overflow-scrolling: touch;
 }
-.dt-tbl {
+.comb-tbl {
     width: 100%;
-    min-width: 480px;
     border-collapse: collapse;
     font-size: 14px;
     font-variant-numeric: tabular-nums;
     font-family: 'DM Sans', sans-serif;
 }
-.dt-gr {
-    padding: 6px 8px;
+.comb-tbl thead th {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    text-align: center;
-    white-space: nowrap;
-}
-.dt-ch {
-    font-size: 11px;
-    font-weight: 700;
-    color: #111827;
+    color: #6B7280;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 8px 8px 6px;
-    border-bottom: 1px solid #E5E7EB;
-    background: #FFFFFF;
-    white-space: normal;
-    line-height: 1.5;
-    text-align: right;
-    vertical-align: bottom;
+    padding: 10px 12px;
+    border-bottom: 2px solid #E5E7EB;
+    background: #F9FAFB;
+    white-space: nowrap;
 }
-.dt-ch.lft { text-align: left; }
-.dt-ch.ctr { text-align: center; }
-.dt-tbl tbody td {
-    padding: 7px 10px;
+.comb-tbl tbody td {
+    padding: 8px 12px;
     font-size: 14px;
     border-bottom: 1px solid #F3F4F6;
     color: #374151;
@@ -1477,260 +1513,121 @@ _DETAIL_CSS = """
     white-space: nowrap;
     vertical-align: middle;
 }
-.dt-tbl tbody tr:nth-child(odd) td  { background: #FFFFFF; }
-.dt-tbl tbody tr:nth-child(even) td { background: #FAFBFD; }
-.dt-tbl tbody tr:hover td           { background: #F0F4FF !important; }
-.dt-rt  { text-align: right; }
-.dt-lt  { text-align: left; }
-.dt-ct  { text-align: center; }
-.dt-tkr { color: #3B82F6; font-weight: 600; font-size: 14px; }
+.comb-tbl tbody tr:nth-child(odd) td  { background: #FFFFFF; }
+.comb-tbl tbody tr:nth-child(even) td { background: #FAFBFD; }
+.comb-tbl tbody tr:hover td           { background: #F0F4FF !important; }
 </style>
 """
 
-# Group-band definitions matching comp-table style
-# (name, colspan, bg, fg, border_top_color)
-_DETAIL_GROUPS = [
-    ("",                  3, "transparent", "transparent", "transparent"),
-    ("Market Data",       1, "#DBEAFE",     "#1E40AF",     "#3B82F6"),
-    ("NTM Multiples",     2, "#DCFCE7",     "#166534",     "#22C55E"),
-    ("Price Performance", 2, "#FEE2E2",     "#991B1B",     "#EF4444"),
-]
 
-# Column definitions: (label, align_class ("lft"/"ctr"/None=right), min_width, group_start)
-# "\n" in labels is rendered as <br> — two-line headers matching comp-table style.
-# All data columns use uniform 76px (same as comp tables).
-_DETAIL_COLS = [
-    ("#",               "ctr",  32, False),
-    ("Ticker",          "lft",  64, False),
-    ("Company",         "lft", 150, False),
-    ("TEV",             "ctr",  84, True),    # group start: Market Data
-    ("NTM\nRev x",      "ctr",  84, True),    # group start: NTM Multiples
-    ("NTM\nEBITDA x",   "ctr",  84, False),
-    ("% Δ",             "ctr",  84, True),    # group start: Price Performance
-    ("Trend",           "ctr", 100, False),   # sparkline chart
-]
+def _build_combined_wl_table(data, change_col, n=25):
+    """Build a single combined table of top N winners + top N losers.
 
+    Columns: Rank, Logo+Ticker, Company Name, Segment (pill), % Change (colored).
+    """
+    valid = [d for d in data if d.get(change_col) is not None]
+    if not valid:
+        return ""
 
-def _dt_cat(val):
-    """Compact colored abbreviation for category column."""
-    cat = str(val) if val else ""
-    abbrev, color = _DETAIL_CAT_ABBREV.get(cat, (cat[:5] if cat else "–", "#94A3B8"))
-    return (
-        f'<td class="dt-lt">'
-        f'<span style="font-size:9px;color:{color};font-weight:500;">{abbrev}</span>'
-        f'</td>'
+    sorted_all = sorted(valid, key=lambda x: x[change_col], reverse=True)
+    winners = sorted_all[:n]
+    losers = sorted_all[-n:] if len(sorted_all) > n else []
+    # Reverse losers so worst is first
+    losers = list(reversed(losers))
+
+    # Build header
+    header = (
+        '<tr>'
+        '<th style="text-align:center;width:40px;">#</th>'
+        '<th style="text-align:left;width:100px;">Ticker</th>'
+        '<th style="text-align:left;">Company</th>'
+        '<th style="text-align:left;width:140px;">Segment</th>'
+        '<th style="text-align:right;width:100px;">% Change</th>'
+        '</tr>'
     )
 
+    def _make_row(rank, d, direction):
+        ticker = _html_lib.escape(str(d.get("ticker") or "?"))
+        logo = logo_img_tag(ticker, size=16)
+        logo_html = f'{logo}&nbsp;' if logo else ''
 
-def _dt_gpm(val):
-    """Gross margin — raw decimal → colored %. Green ≥70, neutral 50-69, amber 30-49, red <30."""
-    try:
-        v = float(val)
-    except (TypeError, ValueError):
-        return f'<td class="dt-rt">{_WL_ND}</td>'
-    try:
-        if np.isnan(v):
-            return f'<td class="dt-rt">{_WL_ND}</td>'
-    except Exception:
-        pass
-    pct = v * 100
-    if   pct >= 70: color = "#16A34A"
-    elif pct >= 50: color = "#374151"
-    elif pct >= 30: color = "#CA8A04"
-    else:           color = "#DC2626"
-    return (
-        f'<td class="dt-rt" style="color:{color};font-weight:500;">'
-        f'{pct:.0f}%</td>'
-    )
+        name = str(d.get("name") or "\u2013")
+        short_name = (name[:28] + "\u2026") if len(name) > 29 else name
 
-
-def _dt_chg(val, is_winner):
-    """Clean percentage for the change % column — no arrows, color only."""
-    try:
-        pct = float(val) * 100
-    except (TypeError, ValueError):
-        return f'<td class="dt-ct"><span style="color:#CBD5E1;">—</span></td>'
-    try:
-        if np.isnan(pct):
-            return f'<td class="dt-ct"><span style="color:#CBD5E1;">—</span></td>'
-    except Exception:
-        pass
-    if pct >= 0:
-        color, text = "#16A34A", f"{pct:.1f}%"
-    else:
-        color, text = "#DC2626", f"({abs(pct):.1f}%)"
-    return (
-        f'<td class="dt-ct">'
-        f'<span style="font-size:14px;font-weight:600;color:{color};">'
-        f'{text}</span>'
-        f'</td>'
-    )
-
-
-def _gs(s):
-    """Inject a group-start left border into the opening <td> of s."""
-    border = "border-left:1px solid #E5E7EB;"
-    try:
-        td_end = s.index('>')
-    except ValueError:
-        return s
-    td_open = s[:td_end]
-    if ' style="' in td_open:
-        return s.replace(' style="', f' style="{border}', 1)
-    else:
-        return s.replace('<td ', f'<td style="{border}" ', 1)
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_sparkline_prices(tickers_tuple, days=60):
-    """Batch-download ~60 days of adj-close prices for sparkline rendering."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        return {}
-    tickers = list(tickers_tuple)
-    if not tickers:
-        return {}
-    start = (pd.Timestamp.today() - pd.DateOffset(days=days)).strftime("%Y-%m-%d")
-    try:
-        raw = yf.download(tickers, start=start, auto_adjust=True,
-                          progress=False, threads=True)
-        if raw.empty:
-            return {}
-        if isinstance(raw.columns, pd.MultiIndex):
-            close = raw["Close"]
-        else:
-            close = raw[["Close"]].copy()
-            if len(tickers) == 1:
-                close.columns = [tickers[0]]
-        # Return dict of ticker → list of close prices
-        result = {}
-        for t in tickers:
-            if t in close.columns:
-                series = close[t].dropna().tolist()
-                if len(series) >= 2:
-                    result[t] = series
-        return result
-    except Exception:
-        return {}
-
-
-def _sparkline_svg(prices, is_winner, width=90, height=28):
-    """Generate an inline SVG sparkline from a list of prices."""
-    if not prices or len(prices) < 2:
-        return '<span style="color:#CBD5E1;">—</span>'
-    mn, mx = min(prices), max(prices)
-    rng = mx - mn if mx != mn else 1.0
-    n = len(prices)
-    pad = 2  # padding
-    points = []
-    for i, p in enumerate(prices):
-        x = pad + (i / (n - 1)) * (width - 2 * pad)
-        y = pad + (1 - (p - mn) / rng) * (height - 2 * pad)
-        points.append(f"{x:.1f},{y:.1f}")
-    polyline = " ".join(points)
-    color = "#16A34A" if is_winner else "#DC2626"
-    # Fill area under the line
-    first_x = pad
-    last_x = pad + (width - 2 * pad)
-    fill_points = f"{first_x},{height} {polyline} {last_x},{height}"
-    fill_color = "rgba(22,163,74,0.1)" if is_winner else "rgba(220,38,38,0.1)"
-    return (
-        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
-        f'style="display:block;margin:0 auto;">'
-        f'<polygon points="{fill_points}" fill="{fill_color}"/>'
-        f'<polyline points="{polyline}" fill="none" stroke="{color}" '
-        f'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
-        f'</svg>'
-    )
-
-
-def _build_detail_html(records, change_col, is_winner, price_data=None):
-    """Comp-table-style HTML table for the Detailed Movers section."""
-    # ── Row 1: group-band header ───────────────────────────────────────────────
-    gr_cells = []
-    for gname, colspan, bg, fg, border_top in _DETAIL_GROUPS:
-        border_css = f"border-top:3px solid {border_top};" if gname else ""
-        label = _html_lib.escape(gname)
-        gr_cells.append(
-            f'<th colspan="{colspan}" class="dt-gr"'
-            f' style="background:{bg};color:{fg};{border_css}">'
-            f'{label}</th>'
-        )
-
-    # ── Row 2: column-name header ──────────────────────────────────────────────
-    ch_cells = []
-    for label, align, width, _ in _DETAIL_COLS:
-        align_class = f" {align}" if align else ""
-        disp = _html_lib.escape(label).replace("\n", "<br>")
-        ch_cells.append(
-            f'<th class="dt-ch{align_class}"'
-            f' style="min-width:{width}px;max-width:{width}px;">'
-            f'{disp}</th>'
-        )
-
-    # ── Body rows ──────────────────────────────────────────────────────────────
-    body_rows = []
-    for i, d in enumerate(records, 1):
-        # Sector color for row left border
         seg_key = d.get("segment", "")
         seg_name = SEGMENT_SHORT.get(seg_key, seg_key)
-        seg_color = SEG_COLOR_MAP.get(seg_name, "#CBD5E1")
+        pill_style = _WL_CAT_PILLS.get(seg_name, _WL_CAT_DEFAULT)
 
-        rank_col = "#111827" if i <= 3 else "#64748B"
-        rank_td = (
-            f'<td class="dt-ct" style="color:{rank_col};font-size:14px;font-weight:700;'
-            f'">'
-            f'{i}</td>'
-        )
-        tick = _html_lib.escape(str(d.get("ticker") or "?"))
-        logo = logo_img_tag(tick, size=16)
-        logo_html = f'{logo}&nbsp;' if logo else ''
-        tick_fw = "700" if i <= 3 else "600"
-        ticker_td = (
-            f'<td class="dt-lt">'
-            f'{logo_html}<span class="dt-tkr" style="font-weight:{tick_fw};">{tick}</span>'
-            f'</td>'
-        )
-        name  = str(d.get("name") or "–")
-        short = (name[:18] + "…") if len(name) > 19 else name
-        company_td = (
-            f'<td class="dt-lt" style="color:#374151;">'
-            f'{_html_lib.escape(short)}</td>'
+        chg_val = d.get(change_col)
+        try:
+            pct = float(chg_val) * 100
+        except (TypeError, ValueError):
+            pct = 0.0
+
+        if pct >= 0:
+            chg_color = "#059669"
+            chg_text = f"+{pct:.1f}%"
+        else:
+            chg_color = "#DC2626"
+            chg_text = f"-{abs(pct):.1f}%"
+
+        rank_col = "#111827" if rank <= 3 else "#64748B"
+        rank_fw = "700" if rank <= 3 else "500"
+
+        return (
+            f'<tr>'
+            f'<td style="text-align:center;color:{rank_col};font-weight:{rank_fw};font-size:13px;">{rank}</td>'
+            f'<td style="text-align:left;">{logo_html}<span style="color:#3B82F6;font-weight:600;font-size:13px;">{ticker}</span></td>'
+            f'<td style="text-align:left;color:#374151;">{_html_lib.escape(short_name)}</td>'
+            f'<td style="text-align:left;"><span style="{pill_style}">{_html_lib.escape(seg_name)}</span></td>'
+            f'<td style="text-align:right;font-weight:700;font-size:14px;color:{chg_color};">{chg_text}</td>'
+            f'</tr>'
         )
 
-        # Reuse existing cell renderers; swap wl-rt → dt-ct for center alignment
-        tev_td    = _wl_tev(d.get("enterprise_value")).replace('"wl-rt"', '"dt-ct"')
-        rev_td    = _wl_mult(d.get("ntm_tev_rev")).replace('"wl-rt"', '"dt-ct"')
-        ebitda_td = _wl_mult(d.get("ntm_tev_ebitda")).replace('"wl-rt"', '"dt-ct"')
-        chg_td    = _dt_chg(d.get(change_col), is_winner)
+    period_label = "2-Week" if "2w" in change_col else "2-Month"
 
-        # Sparkline cell
-        spark_prices = (price_data or {}).get(tick, [])
-        spark_svg = _sparkline_svg(spark_prices, is_winner)
-        spark_td = f'<td class="dt-ct" style="padding:4px 6px;">{spark_svg}</td>'
+    tbody = "<tbody>"
 
-        # Apply group-start left borders to the first column of each group
-        tds = (
-            rank_td
-            + ticker_td
-            + company_td
-            + _gs(tev_td)
-            + _gs(rev_td)
-            + ebitda_td
-            + _gs(chg_td)
-            + spark_td
+    # Winners section header
+    tbody += (
+        f'<tr><td colspan="5" style="padding:0;background:white;border-top:none;">'
+        f'<div style="display:flex;align-items:center;gap:8px;'
+        f'padding:10px 12px 6px 12px;'
+        f'border-left:3px solid #059669;'
+        f'background:linear-gradient(90deg,rgba(5,150,105,0.05),transparent 40%);">'
+        f'<span style="font-size:14px;font-weight:800;color:#059669;'
+        f'text-transform:uppercase;letter-spacing:0.05em;">'
+        f'Top {n} Winners</span>'
+        f'<span style="font-size:12px;color:#94A3B8;font-weight:400;">{period_label}</span>'
+        f'</div></td></tr>'
+    )
+    for i, d in enumerate(winners, 1):
+        tbody += _make_row(i, d, "winners")
+
+    # Losers section header
+    if losers:
+        tbody += (
+            f'<tr><td colspan="5" style="padding:0;background:white;border-top:2px solid #E2E8F0;">'
+            f'<div style="display:flex;align-items:center;gap:8px;'
+            f'padding:10px 12px 6px 12px;'
+            f'border-left:3px solid #DC2626;'
+            f'background:linear-gradient(90deg,rgba(220,38,38,0.05),transparent 40%);">'
+            f'<span style="font-size:14px;font-weight:800;color:#DC2626;'
+            f'text-transform:uppercase;letter-spacing:0.05em;">'
+            f'Top {n} Losers</span>'
+            f'<span style="font-size:12px;color:#94A3B8;font-weight:400;">{period_label}</span>'
+            f'</div></td></tr>'
         )
-        body_rows.append(f"<tr>{tds}</tr>")
+        for i, d in enumerate(losers, 1):
+            tbody += _make_row(i, d, "losers")
+
+    tbody += "</tbody>"
 
     return (
-        f'<div class="dt-outer">'
-        f'<table class="dt-tbl">'
-        f'<thead>'
-        f'<tr>{"".join(gr_cells)}</tr>'
-        f'<tr>{"".join(ch_cells)}</tr>'
-        f'</thead>'
-        f'<tbody>{"".join(body_rows)}</tbody>'
+        f'<div class="comb-outer">'
+        f'<table class="comb-tbl">'
+        f'<thead>{header}</thead>'
+        f'{tbody}'
         f'</table>'
         f'</div>'
     )
@@ -1738,7 +1635,7 @@ def _build_detail_html(records, change_col, is_winner, price_data=None):
 
 # ── Unified page rendering ────────────────────────────────────────────────────
 
-# Page header — block style
+# Page header -- block style
 st.markdown(
     f'<div style="background:#F0F4FF;'
     f'border-radius:12px;padding:24px 32px;margin-bottom:24px;'
@@ -1751,8 +1648,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Stat cards — use 2-week data as the default context
+# Stat cards -- use 2-week data as the default context
 _render_stat_cards(all_data, "price_change_2w")
+
+# ── Distribution chart (after stat cards) ─────────────────────────────────────
+_render_distribution_chart(all_data, "price_change_2w")
 
 # ── Section 2: Share Price Performance (hero table) ───────────────────────────
 st.markdown(
@@ -1768,105 +1668,71 @@ st.markdown(
     '<div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:4px;">'
     'Top Winners and Losers</div>'
     '<div style="font-size:14px;color:#94A3B8;margin-bottom:12px;">'
-    'Full company data for top 25 winners and losers by period</div>',
+    'Top 25 winners and losers by selected period</div>',
     unsafe_allow_html=True,
 )
 
-st.markdown(_DETAIL_CSS, unsafe_allow_html=True)
+st.markdown(_COMBINED_CSS, unsafe_allow_html=True)
 
-
-# Styled period selector — more prominent than default tabs
-st.markdown("""
-<style>
-div[data-baseweb="tab-list"] {
-    gap: 8px;
-    background: #F1F5F9;
-    padding: 4px;
-    border-radius: 10px;
-    display: inline-flex;
-    margin-bottom: 16px;
+# Radio buttons for period selection
+_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD"]
+_PERIOD_TO_MP = {
+    "1W":  "Last Week",
+    "1M":  "Last Month",
+    "3M":  "Last 3M",
+    "6M":  "Last 6M",
+    "12M": "Last 12M",
+    "YTD": "YTD",
 }
-div[data-baseweb="tab-list"] button {
-    font-size: 15px !important;
-    font-weight: 700 !important;
-    padding: 10px 28px !important;
-    border-radius: 8px !important;
-    color: #64748B !important;
-    background: transparent !important;
-    border: none !important;
-}
-div[data-baseweb="tab-list"] button[aria-selected="true"] {
-    background: white !important;
-    color: #111827 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-}
-div[data-baseweb="tab-highlight"] {
-    display: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
-tab_2w, tab_2m = st.tabs(["2-Week", "2-Month"])
+selected_period = st.radio(
+    "Time Period",
+    _PERIOD_OPTIONS,
+    horizontal=True,
+    index=0,
+    key="wl_period_radio",
+)
 
-for _tab_obj, _change_col, _period_label in [
-    (tab_2w, "price_change_2w", "2-Week"),
-    (tab_2m, "price_change_2m", "2-Month"),
-]:
-    with _tab_obj:
-        _valid   = [d for d in all_data if d.get(_change_col) is not None]
-        _winners = sorted(_valid, key=lambda x: x[_change_col], reverse=True)[:25]
-        _losers  = sorted(_valid, key=lambda x: x[_change_col])[:25]
+# Use yfinance to compute returns for the selected period
+_wl_tickers = sorted({d.get("ticker") for d in all_data if d.get("ticker")})
+_wl_raw_dates = [d.get("snapshot_date") for d in all_data if d.get("snapshot_date")]
+_wl_as_of = (max(pd.Timestamp(str(d)[:10]) for d in _wl_raw_dates)
+             if _wl_raw_dates else pd.Timestamp.today().normalize())
 
-        # Batch-fetch sparkline prices for all tickers in this tab
-        _all_tickers = list({
-            d.get("ticker") for d in (_winners + _losers) if d.get("ticker")
-        })
-        _spark_days = 14 if _period_label == "2-Week" else 60
-        _price_data = _fetch_sparkline_prices(tuple(sorted(_all_tickers)), _spark_days)
+with st.spinner("Computing returns..."):
+    _wl_close_df = _mp_fetch_prices(tuple(_wl_tickers))
+    _wl_mp_name = _PERIOD_TO_MP.get(selected_period, "Last Week")
+    _wl_returns = _mp_compute_returns(_wl_close_df, _wl_as_of, [_wl_mp_name])
+    _wl_ret_series = _wl_returns.get(_wl_mp_name, pd.Series(dtype=float))
 
-        _col_w, _col_l = st.columns(2, gap="large")
+# Inject computed returns into data dicts (as decimal, e.g. 0.05 for 5%)
+_change_col_name = f"_yf_{selected_period}"
+_enriched_data = []
+for d in all_data:
+    d2 = dict(d)
+    ticker = d2.get("ticker")
+    if ticker and ticker in _wl_ret_series.index:
+        d2[_change_col_name] = float(_wl_ret_series[ticker]) / 100.0  # convert % to decimal
+    else:
+        d2[_change_col_name] = None
+    _enriched_data.append(d2)
 
-        with _col_w:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;'
-                f'padding:8px 12px;border-left:3px solid #16A34A;'
-                f'background:linear-gradient(90deg,rgba(22,163,74,0.05),transparent 50%);">'
-                f'<span style="font-size:14px;font-weight:800;color:#16A34A;'
-                f'text-transform:uppercase;letter-spacing:0.05em;">Winners</span>'
-                f'<span style="font-size:12px;color:#94A3B8;font-weight:400;">'
-                f'{_period_label}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                _build_detail_html(_winners, _change_col, True, _price_data),
-                unsafe_allow_html=True,
-            )
+_has_data = any(d.get(_change_col_name) is not None for d in _enriched_data)
 
-        with _col_l:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;'
-                f'padding:8px 12px;border-left:3px solid #DC2626;'
-                f'background:linear-gradient(90deg,rgba(220,38,38,0.05),transparent 50%);">'
-                f'<span style="font-size:14px;font-weight:800;color:#DC2626;'
-                f'text-transform:uppercase;letter-spacing:0.05em;">Losers</span>'
-                f'<span style="font-size:12px;color:#94A3B8;font-weight:400;">'
-                f'{_period_label}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                _build_detail_html(_losers, _change_col, False, _price_data),
-                unsafe_allow_html=True,
-            )
+if _has_data:
+    st.markdown(
+        _build_combined_wl_table(_enriched_data, _change_col_name, n=25),
+        unsafe_allow_html=True,
+    )
+else:
+    st.info(f"No data available for {selected_period} period. Try a different time period.")
 
-        _as_of_str = latest_date_str if latest_date_str else "—"
-        st.markdown(
-            f'<div style="font-size:11px;color:#94A3B8;margin-top:12px;padding-left:4px;">'
-            f'<span style="color:#64748B;font-weight:500;">Source:</span> '
-            f'FactSet (fundamentals &amp; estimates) · Yahoo Finance (share prices)  ·  '
-            f'Data as of {_as_of_str}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
+_as_of_str = latest_date_str if latest_date_str else "\u2014"
+st.markdown(
+    f'<div style="font-size:11px;color:#94A3B8;margin-top:12px;padding-left:4px;">'
+    f'<span style="color:#64748B;font-weight:500;">Source:</span> '
+    f'FactSet (fundamentals &amp; estimates) \u00b7 Yahoo Finance (share prices)  \u00b7  '
+    f'Data as of {_as_of_str}'
+    f'</div>',
+    unsafe_allow_html=True,
+)

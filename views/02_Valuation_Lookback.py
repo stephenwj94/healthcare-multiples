@@ -21,9 +21,10 @@ from datetime import datetime, timedelta
 
 import sqlite3
 from config.settings import DB_PATH, SEGMENT_DISPLAY as _SEG_DISPLAY
+from config.color_palette import SEGMENT_COLORS
 from components.sidebar import render_sidebar
 
-# ── Page config ───────────────────────────────────────────────────────────────
+# ── Page config ──────────────────────────────────────────────────────────────���
 st.set_page_config(page_title="Valuation Lookback", page_icon=":material/history:", layout="wide")
 
 st.markdown("""
@@ -99,36 +100,55 @@ details summary {
     font-weight: 500 !important;
     color: #374151 !important;
 }
+/* ── Horizontal radio — compact pill style ── */
+div[data-testid="stRadio"] > div {
+    flex-direction: row !important;
+    gap: 0 !important;
+}
+div[data-testid="stRadio"] > div > label {
+    padding: 4px 12px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 6px !important;
+    margin-right: 4px !important;
+    background: white !important;
+    cursor: pointer !important;
+}
+div[data-testid="stRadio"] > div > label[data-checked="true"] {
+    background: #EFF6FF !important;
+    border-color: #3B82F6 !important;
+    color: #1D4ED8 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 render_sidebar()
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-ALL_PERIODS = [
-    "1 Month Ago", "3 Months Ago", "6 Months Ago",
-    "1 Year Ago", "2 Years Ago", "3 Years Ago", "5 Years Ago",
-]
+# New lookback periods: 1W, 1M, 3M, 6M, 12M, YTD
+LOOKBACK_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD"]
 
-LOOKBACK_DAYS = {
-    "1 Month Ago":  30,
-    "3 Months Ago": 90,
-    "6 Months Ago": 182,
-    "1 Year Ago":   365,
-    "2 Years Ago":  730,
-    "3 Years Ago":  1095,
-    "5 Years Ago":  1825,
+LOOKBACK_DAYS_MAP = {
+    "1W":  7,
+    "1M":  30,
+    "3M":  90,
+    "6M":  182,
+    "12M": 365,
+    # YTD is computed dynamically
 }
 
 CATEGORY_MAP = dict(_SEG_DISPLAY)
-CATEGORY_COLORS = {
-    "Pharma":                              "#29335C",
-    "Consumer Health":                     "#7CEA9C",
-    "MedTech":                             "#F3A712",
-    "Life Sci Tools / Dx / Bioprocessing": "#DB2B39",
-    "Asset-Light Services":                "#0D9488",
-    "CDMOs":                               "#7C3AED",
-    "Health Tech":                         "#EC4899",
+CATEGORY_COLORS_DISPLAY = {
+    "Pharma":                              SEGMENT_COLORS.get("pharma", "#29335C"),
+    "Consumer Health":                     SEGMENT_COLORS.get("consumer_health", "#7CEA9C"),
+    "MedTech":                             SEGMENT_COLORS.get("medtech", "#F3A712"),
+    "Life Sci Tools / Dx / Bioprocessing": SEGMENT_COLORS.get("life_sci_tools", "#DB2B39"),
+    "LST / Dx / Bioprocessing":            SEGMENT_COLORS.get("life_sci_tools", "#DB2B39"),
+    "Asset-Light Services":                SEGMENT_COLORS.get("services", "#0D9488"),
+    "Asset-Heavy Services":                SEGMENT_COLORS.get("cdmo", "#7C3AED"),
+    "CDMOs":                               SEGMENT_COLORS.get("cdmo", "#7C3AED"),
+    "Health Tech":                         SEGMENT_COLORS.get("health_tech", "#EC4899"),
 }
 CATEGORY_ORDER = list(CATEGORY_MAP.values())
 
@@ -139,19 +159,23 @@ CATEGORY_PILLS = {
     "Consumer Health":                     ("#EDFAF3", "#1D6A40"),
     "MedTech":                             ("#FEF9E7", "#A87000"),
     "Life Sci Tools / Dx / Bioprocessing": ("#FDEDEF", "#B01E29"),
+    "LST / Dx / Bioprocessing":            ("#FDEDEF", "#B01E29"),
     "Asset-Light Services":                ("#E6FFFA", "#0F766E"),
+    "Asset-Heavy Services":                ("#F5F3FF", "#5B21B6"),
     "CDMOs":                               ("#F5F3FF", "#5B21B6"),
     "Health Tech":                         ("#FDF2F8", "#9D174D"),
 }
 
 X_AXIS_MAP = {
-    "NTM Revenue Growth %": ("ntm_revenue_growth", "NTM Revenue Growth (%)"),
-    "EBITDA Margin %":      ("ntm_ebitda_margin",  "EBITDA Margin (%)"),
-    "Gross Margin %":       ("gross_margin",        "Gross Margin (%)"),
+    "NTM Revenue Growth %":  ("ntm_revenue_growth", "NTM Revenue Growth (%)"),
+    "NTM EBITDA Margin %":   ("ntm_ebitda_margin",  "NTM EBITDA Margin (%)"),
+    "NTM Gross Margin %":    ("gross_margin",        "NTM Gross Margin (%)"),
+    "Rule of X":             ("rule_of_x",           "Rule of X (Growth + EBITDA Margin)"),
 }
 Y_AXIS_MAP = {
     "NTM EV/Revenue":    ("ntm_ev_revenue",    "NTM EV/Revenue"),
     "NTM EV/EBITDA":     ("ntm_ev_ebitda",     "NTM EV/EBITDA"),
+    "NTM EV/GP":         ("ntm_ev_gp",         "NTM EV/GP"),
 }
 TEV_BANDS = {
     "< $1B":  (0, 1),
@@ -171,7 +195,14 @@ GROWTH_BANDS = {
 # Multiple cards: lower = good for PE buyers (compression is desirable)
 _MULTIPLE_LABELS = {"AVG MULTIPLE", "MEDIAN MULTIPLE"}
 
-# ── Section headers ───────────────────────────────────────────────────────────
+# ── Source attribution helper ────��───────────────────────────────��────────────
+def _source_attribution():
+    st.markdown(
+        '<div style="font-size:9px;color:#B0B7C3;margin-top:4px;">Source: FactSet</div>',
+        unsafe_allow_html=True,
+    )
+
+# ── Section headers ───────────���───────────────────────────────────────────────
 
 def _section_header(title, color="#6B7280"):
     st.markdown(
@@ -181,7 +212,7 @@ def _section_header(title, color="#6B7280"):
         unsafe_allow_html=True,
     )
 
-# ── Formatting helpers ────────────────────────────────────────────────────────
+# ── Formatting helpers ───────��────────────────────────────────────────────────
 
 def _pill(cat):
     bg, fg = CATEGORY_PILLS.get(cat, ("#F3F4F6", "#6B7280"))
@@ -340,7 +371,7 @@ def _fit_regression_models(df):
     y_rev   = df_c["ntm_ev_revenue"].values
     y_ebitda = df_c["ntm_ev_ebitda"].values
 
-    # ── EV/Revenue models ──────────────────────────────────────────────────────
+    # ── EV/Revenue models ──────────���─────────────────────────���─────────────────
     for key, feats, display in [
         ("ev_rev_simple", ["ntm_revenue_growth"],
          ("Growth only",       ["NTM Rev Growth %"])),
@@ -358,7 +389,7 @@ def _fit_regression_models(df):
             "target":   "NTM EV/Revenue",
         }
 
-    # ── EV/EBITDA models ───────────────────────────────────────────────────────
+    # ── EV/EBITDA models ───────────────���──────────────────────��────────────────
     for key, feats, display in [
         ("ev_ebitda_simple", ["ntm_revenue_growth"],
          ("Growth only",        ["NTM Rev Growth %"])),
@@ -377,7 +408,7 @@ def _fit_regression_models(df):
     return models
 
 
-# ── DB data loading ───────────────────────────────────────────────────────────
+# ── DB data loading ───────────���──────────────────────────���────────────────────
 
 @st.cache_data(ttl=300)
 def _all_snapshot_dates():
@@ -396,7 +427,7 @@ def _load_snapshot(snapshot_date: str):
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         """SELECT ticker, name, segment, enterprise_value,
-                  ntm_tev_rev, ntm_tev_ebitda, ntm_revenue_growth,
+                  ntm_tev_rev, ntm_tev_ebitda, ntm_tev_gp, ntm_revenue_growth,
                   ebitda_margin, gross_margin, current_price
            FROM company_snapshots WHERE snapshot_date = ?
            ORDER BY enterprise_value DESC""",
@@ -426,7 +457,7 @@ def _load_daily_multiples(date_str: str):
 
     Growth/margin fundamentals come from weekly Excel history rows.  If the
     target date is a daily-fetcher row (no growth data), we back-fill from
-    the nearest weekly date within ±7 days that does have growth data.
+    the nearest weekly date within +/-7 days that does have growth data.
     """
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -497,10 +528,17 @@ def _build_hist_df_from_daily(daily_rows, df_current_fundamentals):
         df_dm[col] = pd.to_numeric(df_dm[col], errors="coerce")
         df_dm.loc[(df_dm[col] <= 0) | (df_dm[col] >= 100), col] = np.nan
 
-    # Convert stored historical growth/margin decimals → percentages (same as _raw_to_df)
+    # Convert stored historical growth/margin decimals -> percentages (same as _raw_to_df)
     df_dm["ntm_revenue_growth"] = pd.to_numeric(df_dm.get("ntm_revenue_growth"), errors="coerce") * 100
     df_dm["ntm_ebitda_margin"]  = pd.to_numeric(df_dm.get("ebitda_margin"), errors="coerce") * 100
     df_dm["gross_margin"]       = pd.to_numeric(df_dm.get("gross_margin"), errors="coerce") * 100
+
+    # daily_multiples does not have ntm_tev_gp — set to NaN
+    if "ntm_ev_gp" not in df_dm.columns:
+        df_dm["ntm_ev_gp"] = np.nan
+
+    # Compute Rule of X = NTM Revenue Growth % + NTM EBITDA Margin %
+    df_dm["rule_of_x"] = df_dm["ntm_revenue_growth"] + df_dm["ntm_ebitda_margin"]
 
     # Merge in current fundamentals for company name + as fallback for NaN growth/margin
     fund_cols = ["ticker", "company", "ntm_revenue_growth", "ntm_ebitda_margin",
@@ -535,20 +573,28 @@ def _raw_to_df(rows):
         "enterprise_value": "_tev_raw",
         "ntm_tev_rev":      "ntm_ev_revenue",
         "ntm_tev_ebitda":   "ntm_ev_ebitda",
+        "ntm_tev_gp":       "ntm_ev_gp",
         "current_price":    "stock_price",
     })
     df["category"] = df["segment"].map(CATEGORY_MAP).fillna("Other")
     df["tev"]      = df["_tev_raw"].apply(
         lambda x: x / 1e9 if pd.notna(x) and x > 0 else np.nan
     )
-    # Decimals → percentages
+    # Decimals -> percentages
     df["ntm_revenue_growth"] = pd.to_numeric(df["ntm_revenue_growth"], errors="coerce") * 100
     df["ntm_ebitda_margin"]  = pd.to_numeric(df["ebitda_margin"],       errors="coerce") * 100
     df["gross_margin"]       = pd.to_numeric(df["gross_margin"],        errors="coerce") * 100
-    # Sanitise multiples: non-positive or DB sentinel (≥ 100x) → NaN
-    for col in ["ntm_ev_revenue", "ntm_ev_ebitda"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-        df.loc[(df[col] <= 0) | (df[col] >= 100), col] = np.nan
+    # Sanitise multiples: non-positive or DB sentinel (>= 100x) -> NaN
+    for col in ["ntm_ev_revenue", "ntm_ev_ebitda", "ntm_ev_gp"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df.loc[(df[col] <= 0) | (df[col] >= 100), col] = np.nan
+        else:
+            df[col] = np.nan
+
+    # Compute Rule of X = NTM Revenue Growth % + NTM EBITDA Margin %
+    df["rule_of_x"] = df["ntm_revenue_growth"] + df["ntm_ebitda_margin"]
+
     return df
 
 
@@ -564,16 +610,17 @@ def _find_nearest_date(all_dates, target_str, max_gap_days=45):
 
 
 def _period_to_target(period, current_date_str):
-    return (
-        datetime.strptime(current_date_str, "%Y-%m-%d").date()
-        - timedelta(days=LOOKBACK_DAYS[period])
-    ).strftime("%Y-%m-%d")
+    current_date = datetime.strptime(current_date_str, "%Y-%m-%d").date()
+    if period == "YTD":
+        return current_date.replace(month=1, day=1).strftime("%Y-%m-%d")
+    days = LOOKBACK_DAYS_MAP.get(period, 30)
+    return (current_date - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
 def _available_periods(all_dates, current_date_str):
-    """Return ordered list of periods with a real historical snapshot ≠ current date."""
+    """Return ordered list of periods with a real historical snapshot != current date."""
     result = []
-    for period in ALL_PERIODS:
+    for period in LOOKBACK_OPTIONS:
         target  = _period_to_target(period, current_date_str)
         nearest = _find_nearest_date(all_dates, target, max_gap_days=45)
         if nearest and nearest != current_date_str:
@@ -639,7 +686,7 @@ def _get_outlier_labels(df, x_col, y_col):
     return labels
 
 
-# ── Scatter chart builder ─────────────────────────────────────────────────────
+# ── Scatter chart builder ────────��───────────────────────────────��────────────
 
 def build_scatter(df, x_col, y_col, x_label, y_label,
                   show_grid_avgs, x_range, y_range,
@@ -657,15 +704,17 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
     labels = [""] * len(valid)
 
     # Colors — always per-segment
-    colors = [CATEGORY_COLORS.get(c, "#9CA3AF") for c in valid["category"]]
+    colors = [CATEGORY_COLORS_DISPLAY.get(c, "#9CA3AF") for c in valid["category"]]
 
     # ── Hover card — pre-formatted strings for clean two-column alignment ────────
     _HOVER_LABELS = {
         "ntm_ev_revenue":    "NTM EV/Revenue",
         "ntm_ev_ebitda":     "NTM EV/EBITDA",
+        "ntm_ev_gp":         "NTM EV/GP",
         "ntm_revenue_growth":"NTM Rev Growth",
         "ntm_ebitda_margin": "EBITDA Margin",
         "gross_margin":      "Gross Margin",
+        "rule_of_x":         "Rule of X",
         "n3y_revenue_cagr":  "3Y Rev CAGR",
         "growth_adj_rev":    "Growth-Adj Rev",
         "growth_adj_gp":     "Growth-Adj GP",
@@ -673,7 +722,7 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
     x_hover = _HOVER_LABELS.get(x_col, x_label)
     y_hover = _HOVER_LABELS.get(y_col, y_label)
 
-    def _fmt_val(val, metric):
+    def _fmt_val_hover(val, metric):
         m = metric.lower()
         if pd.isna(val):
             return "—"
@@ -687,8 +736,8 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
 
     # Monospace hover card: pre-combined rows with trailing padding so Plotly
     # allocates the correct box width (prevents teal values clipping at right edge)
-    x_vals_str = [_fmt_val(v, x_hover) for v in valid[x_col]]
-    y_vals_str = [_fmt_val(v, y_hover) for v in valid[y_col]]
+    x_vals_str = [_fmt_val_hover(v, x_hover) for v in valid[x_col]]
+    y_vals_str = [_fmt_val_hover(v, y_hover) for v in valid[y_col]]
     max_val_w  = max(
         max((len(s) for s in x_vals_str), default=4),
         max((len(s) for s in y_vals_str), default=4),
@@ -743,7 +792,7 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
     for cat in CATEGORY_ORDER:
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers",
-            marker=dict(size=8, color=CATEGORY_COLORS.get(cat, "#9CA3AF")),
+            marker=dict(size=8, color=CATEGORY_COLORS_DISPLAY.get(cat, "#9CA3AF")),
             name=cat, showlegend=True,
         ))
 
@@ -776,7 +825,7 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
                         bordercolor="rgba(0,0,0,0)", borderpad=2,
                     )
 
-    # Regression line — dotted red like Meritech, R² top-right
+    # Regression line — dotted red like Meritech, R^2 top-right
     if reg_coeffs is not None and len(valid) >= 3:
         xr = np.linspace(x_range[0], x_range[1], 60)
         yr = np.polyval(reg_coeffs, xr).clip(0)
@@ -790,7 +839,7 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
         ))
         if r_sq is not None:
             fig.add_annotation(
-                text=f"R² = {r_sq:.2f}",
+                text=f"R\u00b2 = {r_sq:.2f}",
                 xref="paper", yref="paper",
                 x=0.98, y=0.98,
                 xanchor="right", yanchor="top",
@@ -880,8 +929,6 @@ def build_scatter(df, x_col, y_col, x_label, y_label,
         ),
     )
     # Place x-axis title as an annotation so it reliably renders below tick labels
-    # regardless of how Plotly resolves standoff when y_range starts at 0.
-    # yref="paper" y=-0.11 → ~60px below the plot bottom at height=650, margin b=80.
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=-0.11,
@@ -916,8 +963,8 @@ def build_migration_bar_chart(df_delta, y_col, y_label, top_n=20):
 
     # customdata: company, category, then-value, now-value
     custom = list(zip(
-        df_show["company"].fillna("—"),
-        df_show["category"].fillna("—"),
+        df_show["company"].fillna("\u2014"),
+        df_show["category"].fillna("\u2014"),
         df_show[y_then_c].fillna(0),
         df_show[y_now_c].fillna(0),
     ))
@@ -939,9 +986,9 @@ def build_migration_bar_chart(df_delta, y_col, y_label, top_n=20):
         textposition="outside",
         textfont=dict(size=9, color="#6B7280", family="DM Sans"),
         hovertemplate=(
-            "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
-            f"Then: %{{customdata[2]:.1f}}{_unit} → Now: %{{customdata[3]:.1f}}{_unit}<br>"
-            f"Δ: %{{x:+.1f}}{_unit}<br><extra></extra>"
+            "<b>%{customdata[0]}</b> \u00b7 %{customdata[1]}<br>"
+            f"Then: %{{customdata[2]:.1f}}{_unit} \u2192 Now: %{{customdata[3]:.1f}}{_unit}<br>"
+            f"\u0394: %{{x:+.1f}}{_unit}<br><extra></extra>"
         ),
     ))
     fig.update_layout(
@@ -983,28 +1030,38 @@ def build_migration_bar_chart(df_delta, y_col, y_label, top_n=20):
     return fig
 
 
-# ── Segment summary boxes ─────────────────────────────────────────────────────
+# ─��� Segment summary boxes ────────��────────────────────────────────────────────
 
+# Use SEGMENT_COLORS from config.color_palette for canonical colors
 _SEG_META = [
     {"label": "All",             "short": "All",     "color": "#475569", "bg": "#F8FAFC", "border": "#E2E8F0"},
-    {"label": "Pharma",          "short": "Pharma",  "color": "#1D4ED8", "bg": "#E9EFFC", "border": "#1D4ED8"},
-    {"label": "Consumer Health", "short": "CH",      "color": "#047857", "bg": "#E6F4EE", "border": "#047857"},
-    {"label": "MedTech",         "short": "MedTech", "color": "#B91C1C", "bg": "#FCEAEA", "border": "#B91C1C"},
-    {"label": "Life Sci Tools",  "short": "LST",     "color": "#6D28D9", "bg": "#F1EAFB", "border": "#6D28D9"},
-    {"label": "Services",        "short": "Svcs",    "color": "#B45309", "bg": "#FEF3E2", "border": "#B45309"},
-    {"label": "CDMOs",           "short": "CDMO",    "color": "#C2410C", "bg": "#FDECE0", "border": "#C2410C"},
-    {"label": "Health Tech",     "short": "HCIT",    "color": "#0E7490", "bg": "#E2F1F5", "border": "#0E7490"},
+    {"label": "Pharma",          "short": "Pharma",  "color": SEGMENT_COLORS.get("pharma", "#1D4ED8"),        "bg": "#E9EFFC", "border": SEGMENT_COLORS.get("pharma", "#1D4ED8")},
+    {"label": "Consumer Health", "short": "CH",      "color": SEGMENT_COLORS.get("consumer_health", "#047857"), "bg": "#E6F4EE", "border": SEGMENT_COLORS.get("consumer_health", "#047857")},
+    {"label": "MedTech",         "short": "MedTech", "color": SEGMENT_COLORS.get("medtech", "#B91C1C"),       "bg": "#FCEAEA", "border": SEGMENT_COLORS.get("medtech", "#B91C1C")},
+    {"label": "Life Sci Tools",  "short": "LST",     "color": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9"), "bg": "#F1EAFB", "border": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9")},
+    {"label": "Services",        "short": "Svcs",    "color": SEGMENT_COLORS.get("services", "#B45309"),      "bg": "#FEF3E2", "border": SEGMENT_COLORS.get("services", "#B45309")},
+    {"label": "CDMOs",           "short": "CDMO",    "color": SEGMENT_COLORS.get("cdmo", "#C2410C"),          "bg": "#FDECE0", "border": SEGMENT_COLORS.get("cdmo", "#C2410C")},
+    {"label": "Health Tech",     "short": "HCIT",    "color": SEGMENT_COLORS.get("health_tech", "#0E7490"),   "bg": "#E2F1F5", "border": SEGMENT_COLORS.get("health_tech", "#0E7490")},
 ]
 
 
 def render_segment_summary_boxes(df_hist, df_current, y_col, y_label, category_filter):
-    """Row of small stat boxes: median Then → Now by segment + total universe."""
-    boxes = ""
+    """Row of small stat boxes: median Then -> Now by segment + total universe.
+
+    Layout: flex-wrap with 25% width so boxes flow into rows of 4+4 (including All).
+    No segment is isolated on its own row.
+    """
+    boxes_html = ""
+    visible_segs = []
     for seg in _SEG_META:
         lbl = seg["label"]
         # Skip deselected segments; always show All
         if lbl != "All" and lbl not in category_filter:
             continue
+        visible_segs.append(seg)
+
+    for seg in visible_segs:
+        lbl = seg["label"]
 
         if lbl == "All":
             t_vals = df_hist[y_col].dropna()
@@ -1022,71 +1079,73 @@ def render_segment_summary_boxes(df_hist, df_current, y_col, y_label, category_f
             delta_pct = (delta / med_t * 100) if med_t else 0.0
 
             if delta < -0.1:
-                arrow, dc = "▼", "#16A34A"
+                arrow, dc = "\u25bc", "#16A34A"
             elif delta > 0.1:
-                arrow, dc = "▲", "#DC2626"
+                arrow, dc = "\u25b2", "#DC2626"
             else:
-                arrow, dc = "—", "#94A3B8"
+                arrow, dc = "\u2014", "#94A3B8"
 
             then_s  = f"{med_t:.1f}x"
             now_s   = f"{med_n:.1f}x"
             delta_s = f"{arrow} {abs(delta):.1f}x ({abs(delta_pct):.0f}%)"
-            avg_s   = f"Avg: {avg_t:.1f}x → {avg_n:.1f}x"
+            avg_s   = f"Avg: {avg_t:.1f}x \u2192 {avg_n:.1f}x"
             count_s = f"{len(n_vals)} cos."
         else:
-            then_s = now_s = delta_s = "—"
+            then_s = now_s = delta_s = "\u2014"
             dc = "#94A3B8"
             avg_s = count_s = ""
 
-        boxes += (
-            f'<div style="flex:1;min-width:140px;background:{seg["bg"]};'
+        boxes_html += (
+            f'<div style="flex:1 1 calc(25% - 10px);min-width:140px;max-width:260px;'
+            f'background:{seg["bg"]};'
             f'border:1px solid {seg["border"]};border-radius:8px;'
             f'padding:10px 12px;text-align:center;">'
 
-            # Segment label
-            f'<div style="font-size:9px;font-weight:600;text-transform:uppercase;'
+            # Segment label — readable font size with good contrast
+            f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
             f'letter-spacing:0.05em;color:{seg["color"]};margin-bottom:6px;">'
             f'{seg["short"]}</div>'
 
-            # Then → Now values
+            # Then -> Now values
             f'<div style="display:flex;justify-content:center;align-items:baseline;'
             f'gap:6px;margin-bottom:4px;">'
             f'  <div style="text-align:center;">'
-            f'    <div style="font-size:8px;color:#94A3B8;text-transform:uppercase;">Then</div>'
-            f'    <div style="font-size:16px;font-weight:600;color:#6B7280;'
+            f'    <div style="font-size:9px;color:#64748B;text-transform:uppercase;font-weight:500;">Then</div>'
+            f'    <div style="font-size:18px;font-weight:600;color:#475569;'
             f'font-variant-numeric:tabular-nums;">{then_s}</div>'
             f'  </div>'
-            f'  <div style="font-size:12px;color:#CBD5E1;">→</div>'
+            f'  <div style="font-size:14px;color:#94A3B8;">\u2192</div>'
             f'  <div style="text-align:center;">'
-            f'    <div style="font-size:8px;color:#94A3B8;text-transform:uppercase;">Now</div>'
-            f'    <div style="font-size:16px;font-weight:700;color:#111827;'
+            f'    <div style="font-size:9px;color:#64748B;text-transform:uppercase;font-weight:500;">Now</div>'
+            f'    <div style="font-size:18px;font-weight:700;color:#111827;'
             f'font-variant-numeric:tabular-nums;">{now_s}</div>'
             f'  </div>'
             f'</div>'
 
             # Delta line
-            f'<div style="font-size:11px;font-weight:600;color:{dc};'
+            f'<div style="font-size:12px;font-weight:600;color:{dc};'
             f'font-variant-numeric:tabular-nums;margin-bottom:2px;">{delta_s}</div>'
 
             # Mean subtext + count
-            f'<div style="font-size:8px;color:#B0B7C3;">{avg_s}</div>'
-            f'<div style="font-size:8px;color:#CBD5E1;">{count_s}</div>'
+            f'<div style="font-size:9px;color:#64748B;">{avg_s}</div>'
+            f'<div style="font-size:9px;color:#94A3B8;">{count_s}</div>'
             f'</div>'
         )
 
     st.markdown(
-        f'<div style="font-size:9px;color:#94A3B8;text-transform:uppercase;'
-        f'letter-spacing:0.05em;margin-bottom:6px;">Median {y_label} by Segment</div>',
+        f'<div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;'
+        f'letter-spacing:0.05em;margin-bottom:8px;">Median {y_label} by Segment</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
         f'<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">'
-        f'{boxes}</div>',
+        f'{boxes_html}</div>',
         unsafe_allow_html=True,
     )
+    _source_attribution()
 
 
-# ── HTML table constants & builders ───────────────────────────────────────────
+# ── HTML table constants & builders ────────────���──────────────────────────────
 _TD  = ("padding:6px 10px;font-size:12px;border-bottom:1px solid #F3F4F6;"
         "text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;")
 _TDL = _TD.replace("text-align:right;", "text-align:left;")
@@ -1104,20 +1163,23 @@ def _wrap_table(inner_html):
     )
 
 
-def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
-    """Build an HTML compression/expansion table per the 7-column spec."""
-    df_s = df.sort_values("multiple_delta", ascending=ascending).head(top_n).reset_index(drop=True)
+def _build_movers_table(df, y_col, x_col, ascending, top_n=None):
+    """Build an HTML compression/expansion table. Shows all companies when top_n is None."""
+    if top_n is None:
+        df_s = df.sort_values("multiple_delta", ascending=ascending).reset_index(drop=True)
+    else:
+        df_s = df.sort_values("multiple_delta", ascending=ascending).head(top_n).reset_index(drop=True)
 
     has_growth_then = df_s[f"{x_col}_then"].notna().any()
 
-    _SEG_COLORS = {
-        "Pharma":          "#2563EB",
-        "Consumer Health": "#059669",
-        "MedTech":         "#DC2626",
-        "Life Sci Tools":  "#7C3AED",
-        "Services":        "#F59E0B",
-        "CDMOs":           "#EA580C",
-        "Health Tech":     "#0891B2",
+    _SEG_COLORS_LOCAL = {
+        "Pharma":          SEGMENT_COLORS.get("pharma", "#2563EB"),
+        "Consumer Health": SEGMENT_COLORS.get("consumer_health", "#059669"),
+        "MedTech":         SEGMENT_COLORS.get("medtech", "#DC2626"),
+        "Life Sci Tools":  SEGMENT_COLORS.get("life_sci_tools", "#7C3AED"),
+        "Services":        SEGMENT_COLORS.get("services", "#F59E0B"),
+        "CDMOs":           SEGMENT_COLORS.get("cdmo", "#EA580C"),
+        "Health Tech":     SEGMENT_COLORS.get("health_tech", "#0891B2"),
     }
     _TH_S = (
         "background:#F9FAFB;color:#6B7280;font-size:9px;text-transform:uppercase;"
@@ -1127,47 +1189,58 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
     _TD_S  = "padding:8px 10px;border-bottom:1px solid #F3F4F6;font-variant-numeric:tabular-nums;"
     _MONO  = "font-family:Menlo,Monaco,Consolas,monospace;font-size:11px;white-space:nowrap;"
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    # ── Header ─────────��──────────────────────────────────────────────────────
     col_defs = [
         ("#",         "text-align:right;width:30px;"),
-        ("Ticker",    "text-align:left;"),
+        ("Company",   "text-align:left;"),
         ("Multiple",  "text-align:left;"),
-        ("Δ Multiple","text-align:left;"),
+        ("Chg",       "text-align:left;"),
         ("Growth",    "text-align:left;"),
     ]
     if has_growth_then:
-        col_defs += [("Δ Growth", "text-align:left;"), ("Implied", "text-align:center;")]
+        col_defs += [("Chg", "text-align:left;"), ("Implied", "text-align:center;")]
 
     hdr_html = "".join(
         f'<th style="{_TH_S}{extra}">{label}</th>'
         for label, extra in col_defs
     )
 
-    # ── Rows ──────────────────────────────────────────────────────────────────
+    # ── Rows ─────────────��────────────────────────────────��───────────────────
     rows_html = ""
     for rank, (_, r) in enumerate(df_s.iterrows(), 1):
         bg = "#FFFFFF" if rank % 2 == 1 else "#FAFBFC"
 
         # Segment dot
         cat       = r.get("category", "")
-        dot_color = _SEG_COLORS.get(cat, "#94A3B8")
+        dot_color = _SEG_COLORS_LOCAL.get(cat, "#94A3B8")
         dot_html  = (
             f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
             f'background:{dot_color};margin-right:6px;vertical-align:middle;"></span>'
         )
 
-        # Multiple Then → Now
+        # Company name as clickable link to Company Profile page
+        ticker = r.get("ticker", "")
+        company_name = r.get("company", ticker)
+        company_link = (
+            f'<a href="/Company?ticker={ticker}" target="_self" '
+            f'style="color:#111827;text-decoration:none;border-bottom:1px dotted #CBD5E1;" '
+            f'onmouseover="this.style.color=\'#2563EB\';this.style.borderBottomColor=\'#2563EB\'" '
+            f'onmouseout="this.style.color=\'#111827\';this.style.borderBottomColor=\'#CBD5E1\'">'
+            f'{company_name}</a>'
+        )
+
+        # Multiple Then -> Now
         m_then = r.get(f"{y_col}_then")
         m_now  = r.get(f"{y_col}_now")
-        mt_s   = f"{m_then:.1f}x" if pd.notna(m_then) else "—"
-        mn_s   = f"{m_now:.1f}x"  if pd.notna(m_now)  else "—"
+        mt_s   = f"{m_then:.1f}x" if pd.notna(m_then) else "\u2014"
+        mn_s   = f"{m_now:.1f}x"  if pd.notna(m_now)  else "\u2014"
         mult_cell = (
             f'<span style="color:#94A3B8;">{mt_s}</span>'
-            f'<span style="color:#CBD5E1;"> → </span>'
+            f'<span style="color:#CBD5E1;"> \u2192 </span>'
             f'<b style="color:#111827;">{mn_s}</b>'
         )
 
-        # Δ Multiple  (abs x) + (pct%)
+        # Delta Multiple  (abs x) + (pct%)
         d     = r.get("multiple_delta")
         d_pct = r.get("multiple_delta_pct")
         if pd.notna(d) and pd.notna(d_pct):
@@ -1182,16 +1255,16 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
                     f'+{d:.1f}x (+{d_pct:.0f}%)</span>'
                 )
         else:
-            delta_cell = "—"
+            delta_cell = "\u2014"
 
-        # Growth Then → Now
+        # Growth Then -> Now
         g_then = r.get(f"{x_col}_then")
         g_now  = r.get(f"{x_col}_now")
-        gt_s   = f"{g_then:.0f}%" if pd.notna(g_then) else "—"
-        gn_s   = f"{g_now:.0f}%"  if pd.notna(g_now)  else "—"
+        gt_s   = f"{g_then:.0f}%" if pd.notna(g_then) else "\u2014"
+        gn_s   = f"{g_now:.0f}%"  if pd.notna(g_now)  else "\u2014"
         growth_cell = (
             f'<span style="color:#94A3B8;">{gt_s}</span>'
-            f'<span style="color:#CBD5E1;"> → </span>'
+            f'<span style="color:#CBD5E1;"> \u2192 </span>'
             f'<b style="color:#111827;">{gn_s}</b>'
         )
 
@@ -1201,14 +1274,14 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
             f'onmouseout="this.style.background=\'{bg}\'">'
             f'<td style="{_TD_S}text-align:right;color:#94A3B8;font-size:11px;width:30px;">{rank}</td>'
             f'<td style="{_TD_S}font-size:12px;white-space:nowrap;">'
-            f'{dot_html}<span style="color:#111827;">{r.get("company", r.get("ticker",""))}</span></td>'
+            f'{dot_html}{company_link}</td>'
             f'<td style="{_TD_S}{_MONO}">{mult_cell}</td>'
             f'<td style="{_TD_S}{_MONO}">{delta_cell}</td>'
             f'<td style="{_TD_S}{_MONO}">{growth_cell}</td>'
         )
 
         if has_growth_then:
-            # Δ Growth (pp)
+            # Delta Growth (pp)
             gd = r.get("fundamental_delta")
             if pd.notna(gd):
                 if gd < 0:
@@ -1218,10 +1291,10 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
                 else:
                     gd_cell = '<span style="color:#94A3B8;">0pp</span>'
             else:
-                gd_cell = "—"
+                gd_cell = "\u2014"
 
             # Implied
-            implied_cell = "—"
+            implied_cell = "\u2014"
             if pd.notna(d_pct) and pd.notna(gd):
                 gap = d_pct - (gd * 3)
                 if gap < -15:
@@ -1239,7 +1312,7 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=10):
         rows_html += "</tr>"
 
     return (
-        f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;">'
+        f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;table-layout:auto;">'
         f'<thead><tr>{hdr_html}</tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         f'</table>'
@@ -1259,7 +1332,7 @@ def _build_regression_table(df_reg, y_col, x_col):
     for rank, (_, r) in enumerate(df_s.iterrows(), 1):
         bg  = "#FAFBFC" if rank % 2 == 0 else "#FFFFFF"
         co  = str(r.get("company", ""))
-        if len(co) > 22: co = co[:20] + "…"
+        if len(co) > 22: co = co[:20] + "\u2026"
         rows += (
             f'<tr style="background:{bg};" '
             f'onmouseover="this.style.background=\'#EFF6FF\'" '
@@ -1295,7 +1368,6 @@ def _build_combined_scatter(
     valid_now  = df_now.dropna(subset=[x_col, y_col]).reset_index(drop=True).copy()
 
     # ── Build merged index for ghost-dot cross-linking ─────────────────────────
-    # Companies present in both datasets get a ghost dot on the opposite panel.
     merged = (
         valid_then[["ticker", x_col, y_col]]
         .rename(columns={x_col: "x_then", y_col: "y_then"})
@@ -1312,13 +1384,7 @@ def _build_combined_scatter(
     valid_now["_midx"]  = valid_now["ticker"].map(ticker_to_midx).fillna(-1).astype(int)
     N_MERGED = len(merged)
 
-    # ── Trace index plan ───────────────────────────────────────────────────────
-    #   0         : dots_then (left panel)
-    #   1         : dots_now  (right panel)
-    #   2..2+N-1  : phantom legend (N = len(CATEGORY_ORDER))
-    #   +N_REG    : regression lines (0 or 2, based on reg_coeffs)
-    #   GHOST_RIGHT_IDX : ghost on right panel, lit when left is hovered
-    #   GHOST_LEFT_IDX  : ghost on left panel,  lit when right is hovered
+    # ── Trace index plan ──────────���─────────────────────────────────���──────────
     N_CATS          = len(CATEGORY_ORDER)
     N_REG           = 2 if (reg_coeffs is not None and len(valid_then) >= 3) else 0
     GHOST_RIGHT_IDX = 2 + N_CATS + N_REG
@@ -1326,13 +1392,15 @@ def _build_combined_scatter(
 
     fig = make_subplots(rows=1, cols=2, horizontal_spacing=0.06)
 
-    # ── Hover card helpers ─────────────────────────────────────────────────────
+    # ── Hover card helpers ────���────────────────────────────────────────────────
     _HOVER_LABELS = {
         "ntm_ev_revenue":     "NTM EV/Revenue",
         "ntm_ev_ebitda":      "NTM EV/EBITDA",
+        "ntm_ev_gp":          "NTM EV/GP",
         "ntm_revenue_growth": "NTM Rev Growth",
         "ntm_ebitda_margin":  "EBITDA Margin",
         "gross_margin":       "Gross Margin",
+        "rule_of_x":          "Rule of X",
         "n3y_revenue_cagr":   "3Y Rev CAGR",
         "growth_adj_rev":     "Growth-Adj Rev",
         "growth_adj_gp":      "Growth-Adj GP",
@@ -1340,10 +1408,10 @@ def _build_combined_scatter(
     x_hover = _HOVER_LABELS.get(x_col, x_label)
     y_hover = _HOVER_LABELS.get(y_col, y_label)
 
-    def _fmt_val(val, metric):
+    def _fmt_val_hover(val, metric):
         m = metric.lower()
         if pd.isna(val):
-            return "—"
+            return "\u2014"
         if "ev/" in m or ("revenue" in m and "growth" not in m and "cagr" not in m):
             return f"{val:.1f}x"
         if "growth" in m or "margin" in m or "cagr" in m:
@@ -1356,8 +1424,8 @@ def _build_combined_scatter(
         """customdata: [0] company  [1] ticker  [2] x_row  [3] y_row  [4] merged_idx"""
         if len(valid) == 0:
             return np.empty((0, 5), dtype=object)
-        x_vals_str = [_fmt_val(v, x_hover) for v in valid[x_col]]
-        y_vals_str = [_fmt_val(v, y_hover) for v in valid[y_col]]
+        x_vals_str = [_fmt_val_hover(v, x_hover) for v in valid[x_col]]
+        y_vals_str = [_fmt_val_hover(v, y_hover) for v in valid[y_col]]
         max_val_w  = max(
             max((len(s) for s in x_vals_str), default=4),
             max((len(s) for s in y_vals_str), default=4),
@@ -1384,7 +1452,7 @@ def _build_combined_scatter(
         "<extra></extra>"
     )
 
-    # ── Trace 0: dots_then (left panel) ────────────────────────────────────────
+    # ── Trace 0: dots_then (left panel) ──────────���─────────────────────────────
     fig.add_trace(go.Scatter(
         x=valid_then[x_col] if not valid_then.empty else [],
         y=valid_then[y_col] if not valid_then.empty else [],
@@ -1392,7 +1460,7 @@ def _build_combined_scatter(
         name="",
         marker=dict(
             size=valid_then["tev"].apply(_dot_size).tolist() if not valid_then.empty else [],
-            color=[CATEGORY_COLORS.get(c, "#9CA3AF") for c in valid_then["category"]] if not valid_then.empty else [],
+            color=[CATEGORY_COLORS_DISPLAY.get(c, "#9CA3AF") for c in valid_then["category"]] if not valid_then.empty else [],
             opacity=0.8,
             line=dict(color="white", width=1.2),
         ),
@@ -1404,7 +1472,7 @@ def _build_combined_scatter(
         showlegend=False,
     ), row=1, col=1)
 
-    # ── Trace 1: dots_now (right panel) ────────────────────────────────────────
+    # ── Trace 1: dots_now (right panel) ────────────���───────────────────────────
     fig.add_trace(go.Scatter(
         x=valid_now[x_col] if not valid_now.empty else [],
         y=valid_now[y_col] if not valid_now.empty else [],
@@ -1412,7 +1480,7 @@ def _build_combined_scatter(
         name="",
         marker=dict(
             size=valid_now["tev"].apply(_dot_size).tolist() if not valid_now.empty else [],
-            color=[CATEGORY_COLORS.get(c, "#9CA3AF") for c in valid_now["category"]] if not valid_now.empty else [],
+            color=[CATEGORY_COLORS_DISPLAY.get(c, "#9CA3AF") for c in valid_now["category"]] if not valid_now.empty else [],
             opacity=0.8,
             line=dict(color="white", width=1.2),
         ),
@@ -1428,11 +1496,11 @@ def _build_combined_scatter(
     for cat in CATEGORY_ORDER:
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers",
-            marker=dict(size=8, color=CATEGORY_COLORS.get(cat, "#9CA3AF")),
+            marker=dict(size=8, color=CATEGORY_COLORS_DISPLAY.get(cat, "#9CA3AF")),
             name=cat, showlegend=True,
         ), row=1, col=1)
 
-    # ── Regression line traces (indices 2+N_CATS and 2+N_CATS+1) ───────────────
+    # ── Regression line traces ─────��───────────────────────────────────────────
     if reg_coeffs is not None and len(valid_then) >= 3:
         xr = np.linspace(x_range[0], x_range[1], 60)
         yr = np.polyval(reg_coeffs, xr).clip(0)
@@ -1466,7 +1534,7 @@ def _build_combined_scatter(
         hoverinfo="skip", showlegend=False,
     ), row=1, col=1)
 
-    # ── Median crosshairs ─────────────────────────────────────────────────────
+    # ── Median crosshairs ────────��────────────────────────────────────────────
     for _vd, _ci in [(valid_then, 1), (valid_now, 2)]:
         if not _vd.empty:
             _mx = float(_vd[x_col].median())
@@ -1476,12 +1544,11 @@ def _build_combined_scatter(
             fig.add_vline(x=_mx, line_dash="dash", line_color="#D1D5DB",
                           line_width=0.5, row=1, col=_ci)
 
-    # ── R² annotations (top-right of each panel) ──────────────────────────────
-    # horizontal_spacing=0.06 → left panel ends at ≈0.47, right starts at ≈0.53
+    # ── R^2 annotations ──────────────────────────────────────────────────────
     if reg_coeffs is not None and r_sq is not None and len(valid_then) >= 3:
         for _r2x in (0.455, 0.985):
             fig.add_annotation(
-                text=f"R² = {r_sq:.2f}",
+                text=f"R\u00b2 = {r_sq:.2f}",
                 xref="paper", yref="paper",
                 x=_r2x, y=0.98,
                 xanchor="right", yanchor="top",
@@ -1491,7 +1558,7 @@ def _build_combined_scatter(
                 borderpad=4, bordercolor="rgba(0,0,0,0)",
             )
 
-    # ── Axis tick formatting ───────────────────────────────────────────────────
+    # ── Axis tick formatting ────────────────────────────────────────���──────────
     _x_min, _x_max = x_range[0], x_range[1]
     _raw_step  = (_x_max - _x_min) / 6.0
     _tick_step = next((n for n in [1, 2, 5, 10, 20, 25, 50, 100] if n >= _raw_step), 100)
@@ -1560,7 +1627,6 @@ def _build_combined_scatter(
     )
 
     # X-axis title annotations below each panel
-    # Left mid ≈ 0.235, right mid ≈ 0.765 (for horizontal_spacing=0.06)
     for _ax_x in (0.235, 0.765):
         fig.add_annotation(
             xref="paper", yref="paper",
@@ -1619,14 +1685,14 @@ def _build_combined_scatter(
     _html = fig.to_html(
         include_plotlyjs="cdn",
         full_html=True,
-        config={"displayModeBar": False, "scrollZoom": True},
+        config={"displayModeBar": False, "scrollZoom": False},
     )
     return _html.replace("</body>", _js + "\n</body>")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PAGE HEADER & JUMP NAVIGATION
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 st.markdown(
     '<h1 style="font-size:28px;font-weight:700;color:#111827;margin:0 0 4px 0;">'
@@ -1638,7 +1704,7 @@ st.markdown(
 )
 
 
-# ── Load snapshot dates + daily multiples dates ───────────────────────────────
+# ── Load snapshot dates + daily multiples dates ───────────���───────────────────
 all_snap_dates  = _all_snapshot_dates()
 all_daily_dates = _all_daily_dates()
 
@@ -1649,7 +1715,6 @@ if not all_snap_dates:
 current_date_str = all_snap_dates[0]
 
 # Prefer daily_multiples dates for period availability (goes back to 2024+)
-# Fall back to snapshot-only dates if daily_multiples table is empty
 avail_dates_for_lookback = all_daily_dates if all_daily_dates else all_snap_dates
 avail_periods            = _available_periods(avail_dates_for_lookback, current_date_str)
 
@@ -1663,23 +1728,32 @@ if not avail_periods:
     )
     st.stop()
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SECTION 1 — CONTROL BAR
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
-col1, col2, col3, col4, col5, col6 = st.columns([1.5, 1.5, 1.5, 2.0, 1.5, 1.5])
+# ── Lookback period: horizontal radio selector ─────────��──────────────────────
+st.markdown(
+    '<div style="font-size:9px;font-weight:600;text-transform:uppercase;'
+    'letter-spacing:0.05em;color:#94A3B8;margin-bottom:2px;">LOOKBACK PERIOD</div>',
+    unsafe_allow_html=True,
+)
+# Default to 12M if available, else last available
+default_period_idx = avail_periods.index("12M") if "12M" in avail_periods else len(avail_periods) - 1
+lookback_period = st.radio(
+    "LOOKBACK PERIOD",
+    avail_periods,
+    index=default_period_idx,
+    horizontal=True,
+    label_visibility="collapsed",
+)
 
-with col1:
-    # Default to "1 Year Ago" if available (index 3), otherwise last available
-    default_idx = min(3, len(avail_periods) - 1)
-    lookback_period = st.selectbox("COMPARE TO", avail_periods, index=default_idx)
+col2, col3, col5, col6 = st.columns([1.5, 1.5, 1.5, 1.5])
+
 with col2:
     y_axis_label = st.selectbox("Y-AXIS (MULTIPLE)", list(Y_AXIS_MAP.keys()), index=0)
 with col3:
     x_axis_label = st.selectbox("X-AXIS (FUNDAMENTAL)", list(X_AXIS_MAP.keys()), index=0)
-with col4:
-    cat_all = ["Pharma", "Consumer Health", "MedTech", "Life Sci Tools", "Services", "CDMOs", "Health Tech"]
-    category_filter = st.multiselect("CATEGORY", cat_all, default=cat_all)
 with col5:
     _tev_all = list(TEV_BANDS.keys())
     tev_bands_sel = st.multiselect("TEV", _tev_all, default=_tev_all)
@@ -1687,20 +1761,36 @@ with col6:
     _growth_all = list(GROWTH_BANDS.keys())
     growth_bands_sel = st.multiselect("GROWTH", _growth_all, default=_growth_all)
 
+# ── Category filters: individual checkboxes in columns ────────────────────────
+cat_all = list(dict.fromkeys(CATEGORY_MAP.values()))  # unique display names, ordered
+st.markdown(
+    '<div style="font-size:9px;font-weight:600;text-transform:uppercase;'
+    'letter-spacing:0.05em;color:#94A3B8;margin-bottom:2px;margin-top:8px;">SEGMENTS</div>',
+    unsafe_allow_html=True,
+)
+n_cats = len(cat_all)
+n_cols = min(n_cats, 7)
+cat_cols = st.columns(n_cols)
+category_filter = []
+for i, cat_name in enumerate(cat_all):
+    with cat_cols[i % n_cols]:
+        checked = st.checkbox(cat_name, value=True, key=f"cat_{cat_name}")
+        if checked:
+            category_filter.append(cat_name)
+
 x_col, x_label = X_AXIS_MAP[x_axis_label]
 y_col, y_label = Y_AXIS_MAP[y_axis_label]
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # DATA LOADING
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
-with st.spinner("Loading current snapshot…"):
+with st.spinner("Loading current snapshot..."):
     df_current_full = _raw_to_df(_load_snapshot(current_date_str))
 
 target_hist_str = _period_to_target(lookback_period, current_date_str)
 nearest_hist    = _find_nearest_date(avail_dates_for_lookback, target_hist_str, max_gap_days=45)
 
-# Guard: this period was in avail_periods so this shouldn't trigger, but be safe
 if not nearest_hist or nearest_hist == current_date_str:
     st.markdown(
         f'''<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;
@@ -1721,19 +1811,18 @@ if not nearest_hist or nearest_hist == current_date_str:
     st.stop()
 
 # Load historical data — prefer daily_multiples (longer history) over company_snapshots
-with st.spinner("Loading historical multiples…"):
+with st.spinner("Loading historical multiples..."):
     if all_daily_dates and nearest_hist in all_daily_dates:
         _hist_rows    = _load_daily_multiples(nearest_hist)
         df_hist_full  = _build_hist_df_from_daily(_hist_rows, df_current_full)
         _using_daily  = True
     else:
-        # Fallback: use company_snapshots (has full fundamentals but limited date range)
         df_hist_full  = _raw_to_df(_load_snapshot(nearest_hist))
         _using_daily  = False
 
 lookback_date_str = nearest_hist
 
-# ── Apply filters ─────────────────────────────────────────────────────────────
+# ── Apply filters ───────────���─────────────────────────────────────────────────
 
 def _in_any_band(value, selected_labels, band_map):
     """Return True if value falls within any of the selected bands."""
@@ -1747,9 +1836,6 @@ def _in_any_band(value, selected_labels, band_map):
 
 def _filter(df, apply_tev=True, apply_growth=True):
     df = df[df["category"].isin(category_filter)].copy()
-    # TEV filter: only applied to df_current — daily_multiples has many null TEVs
-    # that would wrongly exclude companies. The `both` intersection below enforces
-    # the same filtered universe on df_hist.
     if apply_tev and len(tev_bands_sel) < len(TEV_BANDS):
         df = df[df["tev"].apply(lambda v: _in_any_band(v, tev_bands_sel, TEV_BANDS))]
     if apply_growth and len(growth_bands_sel) < len(GROWTH_BANDS):
@@ -1761,18 +1847,18 @@ def _filter(df, apply_tev=True, apply_growth=True):
 df_current = _filter(df_current_full, apply_tev=True,  apply_growth=True)
 df_hist    = _filter(df_hist_full,    apply_tev=False, apply_growth=False)
 
-# EBITDA view: exclude N/M multiples
-if y_col == "ntm_ev_ebitda":
+# EBITDA / GP view: exclude N/M multiples
+if y_col in ("ntm_ev_ebitda", "ntm_ev_gp"):
     df_current = df_current.dropna(subset=[y_col])
     df_hist    = df_hist.dropna(subset=[y_col])
 
-# Keep only companies present in both periods (real lookback always applied)
+# Keep only companies present in both periods
 both = set(df_current["ticker"]) & set(df_hist["ticker"])
 excl = len(set(df_current["ticker"]) | set(df_hist["ticker"])) - len(both)
 if excl:
     st.markdown(
         f'<div style="font-size:11px;color:#94A3B8;margin:2px 0 6px 0;">'
-        f'{excl} companies excluded — not present in both periods.</div>',
+        f'{excl} companies excluded \u2014 not present in both periods.</div>',
         unsafe_allow_html=True,
     )
 df_current = df_current[df_current["ticker"].isin(both)]
@@ -1781,18 +1867,18 @@ df_hist    = df_hist[df_hist["ticker"].isin(both)]
 if len(df_current) < 5:
     st.markdown(
         f'<div style="font-size:11px;color:#94A3B8;margin:2px 0 6px 0;">'
-        f'Only {len(df_current)} companies match current filters — '
+        f'Only {len(df_current)} companies match current filters \u2014 '
         f'consider broadening category or TEV filters.</div>',
         unsafe_allow_html=True,
     )
 
-# ── Shared axis ranges (critical for side-by-side visual comparison) ──────────
+# ── Shared axis ranges ────────────────────────────────────────────────────────
 combined = pd.concat([df_hist, df_current])
 x_range  = [_nice_min(combined[x_col]), _nice_max(combined[x_col])]
 _y_min   = float(combined[y_col].min()) if not combined[y_col].dropna().empty else 0.0
 y_range  = [min(0, _y_min * 1.05) if _y_min < 0 else 0, _nice_max(combined[y_col])]
 
-# ── Summary stats ─────────────────────────────────────────────────────────────
+# ── Summary stats ─────────────────────────────────────��───────────────────────
 avg_now   = _safe_mean(df_current,    y_col)
 avg_then  = _safe_mean(df_hist,       y_col)
 med_now   = _safe_median(df_current,  y_col)
@@ -1800,9 +1886,6 @@ med_then  = _safe_median(df_hist,     y_col)
 ag_now    = _safe_mean(df_current,    "ntm_revenue_growth")
 am_now    = _safe_mean(df_current,    "ntm_ebitda_margin")
 
-# Historical growth/margin: use actual stored values when available
-# (from Excel history sheets stored in daily_multiples since the schema upgrade).
-# Falls back gracefully — if all values are NaN the display shows "—".
 ag_then   = _safe_mean(df_hist,    "ntm_revenue_growth")
 am_then   = _safe_mean(df_hist,    "ntm_ebitda_margin")
 
@@ -1812,7 +1895,7 @@ n_hist       = df_hist.dropna(subset=[y_col, x_col]).shape[0]
 n_curr       = df_current.dropna(subset=[y_col, x_col]).shape[0]
 
 
-# ── Fit historical regression (used for table + regression-line overlay) ───────
+# ── Fit historical regression ────────────���────────────────────────────────────
 reg_df     = df_hist[[x_col, y_col]].dropna()
 reg_coeffs = None
 r_sq       = None
@@ -1827,70 +1910,12 @@ if len(reg_df) >= 5:
     ss_tot       = float(np.sum((y_fit - y_fit.mean())   ** 2))
     r_sq         = (1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
-# ── Segment summary boxes (between control bar and scatter plots) ──────────────
-render_segment_summary_boxes(df_hist, df_current, y_col, y_label, category_filter)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — SIDE-BY-SIDE SCATTER PLOTS
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
+# SECTION 2 — DELTA SUMMARY STAT CARDS (ABOVE the scatter plot)
+# ===============================================================================
 
-st.markdown('<div style="height:32px;"></div><div id="scatter"></div>', unsafe_allow_html=True)
-
-def _fmt_s(v, suf="x"):
-    return f"{v:.1f}{suf}" if isinstance(v, float) and not np.isnan(v) else "—"
-
-col_left, col_right = st.columns(2, gap="medium")
-
-with col_left:
-    # chart-header class enforces fixed 38px height — prevents vertical misalignment
-    st.markdown(
-        f'<div class="chart-header" style="background:#F8FAFC;border:1px solid #E2E8F0;'
-        f'border-radius:8px;padding:0 14px;margin-bottom:8px;">'
-        f'<span style="font-size:12px;font-weight:600;color:#475569;">{lookback_fmt}</span>'
-        f'<span style="font-size:10px;color:#94A3B8;margin-left:8px;">'
-        f'Avg: {_fmt_s(avg_then)} · Med: {_fmt_s(med_then)} · {n_hist} cos.</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-with col_right:
-    st.markdown(
-        f'<div class="chart-header" style="background:#F0F7FF;border:1px solid #BFDBFE;'
-        f'border-radius:8px;padding:0 14px;margin-bottom:8px;">'
-        f'<span style="font-size:12px;font-weight:600;color:#1E40AF;">Current ({current_fmt})</span>'
-        f'<span style="font-size:10px;color:#3B82F6;margin-left:8px;">'
-        f'Avg: {_fmt_s(avg_now)} · Med: {_fmt_s(med_now)} · {n_curr} cos.</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-combined_html = _build_combined_scatter(
-    df_hist, df_current,
-    x_col, y_col, x_label, y_label,
-    x_range, y_range,
-    reg_coeffs=reg_coeffs, r_sq=r_sq,
-)
-components.html(combined_html, height=620, scrolling=False)
-
-st.markdown(
-    '<div style="font-size:9px;color:#CBD5E1;text-align:center;margin-top:4px;">'
-    'Scroll to zoom · Double-click to reset · Hover a dot to highlight its position on the other chart'
-    '</div>',
-    unsafe_allow_html=True,
-)
-if reg_coeffs is not None:
-    st.caption(
-        f"Dotted line = linear regression fit from {lookback_fmt} historical data. "
-        "Companies above the line trade at a premium to their historical growth-adjusted multiple; "
-        "below the line = discount."
-    )
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — DELTA SUMMARY STAT CARDS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-st.markdown('<div style="height:32px;"></div><div id="deltas"></div>', unsafe_allow_html=True)
-st.markdown("---")
+st.markdown('<div style="height:16px;"></div><div id="deltas"></div>', unsafe_allow_html=True)
 
 stat_defs = [
     ("AVG MULTIPLE",      avg_now,  avg_then,  "x"),
@@ -1907,7 +1932,7 @@ for i, (label, cur, hist, suf) in enumerate(stat_defs):
     nan_d = isinstance(delta, float) and np.isnan(delta)
 
     if nan_d:
-        arrow_html = '<span style="color:#9CA3AF;font-size:13px;">—</span>'
+        arrow_html = '<span style="color:#9CA3AF;font-size:13px;">\u2014</span>'
     else:
         # Multiple cards: compression = green (cheaper = good for PE buyers)
         if label in _MULTIPLE_LABELS:
@@ -1917,15 +1942,15 @@ for i, (label, cur, hist, suf) in enumerate(stat_defs):
 
         if delta > 0:
             arrow_html = (f'<span style="color:{d_color};font-weight:600;font-size:13px;">'
-                          f'▲ {abs(delta):.1f}{suf}</span>')
+                          f'\u25b2 {abs(delta):.1f}{suf}</span>')
         elif delta < 0:
             arrow_html = (f'<span style="color:{d_color};font-weight:600;font-size:13px;">'
-                          f'▼ {abs(delta):.1f}{suf}</span>')
+                          f'\u25bc {abs(delta):.1f}{suf}</span>')
         else:
-            arrow_html = '<span style="color:#9CA3AF;font-size:13px;">— flat</span>'
+            arrow_html = '<span style="color:#9CA3AF;font-size:13px;">\u2014 flat</span>'
 
-    c_str = f"{cur:.1f}{suf}"  if not nan_c else "—"
-    h_str = f"{hist:.1f}{suf}" if not nan_h else "—"
+    c_str = f"{cur:.1f}{suf}"  if not nan_c else "\u2014"
+    h_str = f"{hist:.1f}{suf}" if not nan_h else "\u2014"
 
     with stat_cols[i]:
         st.markdown(
@@ -1936,14 +1961,79 @@ for i, (label, cur, hist, suf) in enumerate(stat_defs):
             f'<div style="font-size:20px;font-weight:700;color:#111827;">{c_str}</div>'
             f'<div style="margin-top:4px;">{arrow_html}</div>'
             f'<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">'
-            f'vs. {lookback_period} · was {h_str}</div>'
+            f'vs. {lookback_period} ago \u00b7 was {h_str}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — BIGGEST MOVERS TABLES
-# ═══════════════════════════════════════════════════════════════════════════════
+_source_attribution()
+
+# ── Segment summary boxes ─────────��───────────────────────────────────────────
+render_segment_summary_boxes(df_hist, df_current, y_col, y_label, category_filter)
+
+# ===============================================================================
+# SECTION 3 — SIDE-BY-SIDE SCATTER PLOTS
+# ===============================================================================
+
+st.markdown('<div style="height:32px;"></div><div id="scatter"></div>', unsafe_allow_html=True)
+
+def _fmt_s(v, suf="x"):
+    return f"{v:.1f}{suf}" if isinstance(v, float) and not np.isnan(v) else "\u2014"
+
+col_left, col_right = st.columns(2, gap="medium")
+
+with col_left:
+    st.markdown(
+        f'<div class="chart-header" style="background:#F8FAFC;border:1px solid #E2E8F0;'
+        f'border-radius:8px;padding:0 14px;margin-bottom:8px;">'
+        f'<span style="font-size:12px;font-weight:600;color:#475569;">{lookback_fmt}</span>'
+        f'<span style="font-size:10px;color:#94A3B8;margin-left:8px;">'
+        f'Avg: {_fmt_s(avg_then)} \u00b7 Med: {_fmt_s(med_then)} \u00b7 {n_hist} cos.</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+with col_right:
+    st.markdown(
+        f'<div class="chart-header" style="background:#F0F7FF;border:1px solid #BFDBFE;'
+        f'border-radius:8px;padding:0 14px;margin-bottom:8px;">'
+        f'<span style="font-size:12px;font-weight:600;color:#1E40AF;">Current ({current_fmt})</span>'
+        f'<span style="font-size:10px;color:#3B82F6;margin-left:8px;">'
+        f'Avg: {_fmt_s(avg_now)} \u00b7 Med: {_fmt_s(med_now)} \u00b7 {n_curr} cos.</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+combined_html = _build_combined_scatter(
+    df_hist, df_current,
+    x_col, y_col, x_label, y_label,
+    x_range, y_range,
+    reg_coeffs=reg_coeffs, r_sq=r_sq,
+)
+components.html(combined_html, height=620, scrolling=False)
+
+st.markdown(
+    '<div style="font-size:9px;color:#CBD5E1;text-align:center;margin-top:4px;">'
+    'Box-select to zoom \u00b7 Double-click to reset \u00b7 Hover a dot to highlight its position on the other chart'
+    '</div>',
+    unsafe_allow_html=True,
+)
+# Reset zoom button
+if st.button("Reset Zoom", key="reset_zoom"):
+    st.rerun()
+
+if reg_coeffs is not None:
+    st.caption(
+        f"Dotted line = linear regression fit from {lookback_fmt} historical data. "
+        "Companies above the line trade at a premium to their historical growth-adjusted multiple; "
+        "below the line = discount."
+    )
+
+_source_attribution()
+
+# ===============================================================================
+# SECTION 4 — BIGGEST MOVERS TABLES (Expansions on top, Compressions below)
+# ===============================================================================
 
 st.markdown('<div id="movers"></div>', unsafe_allow_html=True)
 
@@ -1957,49 +2047,52 @@ df_merged["multiple_delta"]     = df_merged[f"{y_col}_now"] - df_merged[f"{y_col
 df_merged["multiple_delta_pct"] = (
     df_merged["multiple_delta"] / df_merged[f"{y_col}_then"].replace(0, np.nan)
 ) * 100
-# Compute growth/margin delta (historical values now stored in daily_multiples)
 df_merged["fundamental_delta"] = df_merged[f"{x_col}_now"] - df_merged[f"{x_col}_then"]
 
-col_comp, col_exp = st.columns(2)
+# Expansions on top, Compressions below — stacked vertically
+if len(df_merged) >= 2:
+    st.markdown(
+        '<div style="font-size:11px;font-weight:700;color:#16A34A;text-transform:uppercase;'
+        'letter-spacing:0.06em;margin-bottom:8px;">Biggest Multiple Expansions</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
+        'overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
+        + _build_movers_table(df_merged, y_col, x_col, ascending=False, top_n=None)
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+    _source_attribution()
 
-with col_comp:
-    if len(df_merged) >= 2:
-        st.markdown(
-            '<div style="font-size:11px;font-weight:700;color:#DC2626;text-transform:uppercase;'
-            'letter-spacing:0.06em;margin-bottom:8px;">Biggest Compressions</div>'
-            '<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
-            'overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
-            + _build_movers_table(df_merged, y_col, x_col, ascending=True, top_n=10)
-            + '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("Not enough data for compression table.")
+    st.markdown('<div style="height:24px;"></div>', unsafe_allow_html=True)
 
-with col_exp:
-    if len(df_merged) >= 2:
-        st.markdown(
-            '<div style="font-size:11px;font-weight:700;color:#16A34A;text-transform:uppercase;'
-            'letter-spacing:0.06em;margin-bottom:8px;">Biggest Expansions</div>'
-            '<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
-            'overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
-            + _build_movers_table(df_merged, y_col, x_col, ascending=False, top_n=10)
-            + '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("Not enough data for expansion table.")
+    st.markdown(
+        '<div style="font-size:11px;font-weight:700;color:#DC2626;text-transform:uppercase;'
+        'letter-spacing:0.06em;margin-bottom:8px;">Biggest Multiple Compressions</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
+        'overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
+        + _build_movers_table(df_merged, y_col, x_col, ascending=True, top_n=None)
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+    _source_attribution()
+else:
+    st.caption("Not enough data for movers tables.")
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SECTION 5 — MIGRATION MAP (horizontal bar chart)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 st.markdown('<div id="migration"></div>', unsafe_allow_html=True)
 st.markdown(
     f'<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:4px;">Biggest Movers</div>'
     f'<div style="font-size:11px;color:#94A3B8;margin-bottom:12px;">'
-    f'Top 20 by absolute {y_label} change\u2002·\u2002'
-    f'<span style="color:#F87171;font-weight:500;">&#x25A0; Compression</span>\u2002·\u2002'
+    f'Top 20 by absolute {y_label} change\u2002\u00b7\u2002'
+    f'<span style="color:#F87171;font-weight:500;">&#x25A0; Compression</span>\u2002\u00b7\u2002'
     f'<span style="color:#22C55E;font-weight:500;">&#x25A0; Expansion</span></div>',
     unsafe_allow_html=True,
 )
@@ -2024,6 +2117,7 @@ if len(df_delta) >= 3:
     )
     st.plotly_chart(fig_mig, use_container_width=True, config={"displayModeBar": False})
     st.markdown("</div>", unsafe_allow_html=True)
+    _source_attribution()
 else:
     st.markdown(
         '<div style="font-size:11px;color:#94A3B8;">Not enough matched companies for migration chart.</div>',
@@ -2035,10 +2129,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
     '<div style="font-size:10px;color:#9CA3AF;">'
     '<span style="color:#64748B;font-weight:500;">Source:</span> '
-    'FactSet (fundamentals, estimates, multiples) · Historical data from weekly snapshots'
+    'FactSet (fundamentals, estimates, multiples) \u00b7 Historical data from weekly snapshots'
     '</div>',
     unsafe_allow_html=True,
 )
-
-
-
