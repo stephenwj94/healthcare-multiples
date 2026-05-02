@@ -27,6 +27,7 @@ from config.color_palette import (
 from config.company_registry import COMPANY_REGISTRY
 from config.settings import DB_PATH
 from fetcher.db_manager import DBManager
+from components.news_filter import is_source_blocked
 
 render_sidebar()
 
@@ -901,7 +902,10 @@ news = _fetch_news(yahoo_ticker)
 if not news:
     st.caption("No recent news returned by Yahoo Finance for this ticker.")
 else:
-    for item in news[:8]:
+    shown = 0
+    for item in news:
+        if shown >= 8:
+            break
         # yfinance news items have nested "content" with title/pubDate/canonicalUrl/provider
         content = item.get("content") or item
         title = content.get("title") or item.get("title") or "(no title)"
@@ -919,6 +923,9 @@ else:
             pub_str = ""
         provider = ((content.get("provider") or {}).get("displayName")
                     or item.get("publisher") or "")
+        if is_source_blocked(provider):
+            continue
+        shown += 1
         st.markdown(
             f'<div class="company-news-item">'
             f'<a href="{url}" target="_blank" rel="noopener noreferrer">'

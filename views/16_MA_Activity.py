@@ -17,6 +17,7 @@ from components.sidebar import render_sidebar
 from config.color_palette import LIGHT_BADGE_STYLES, SEGMENT_SHORT, SEGMENT_COLORS
 from config.company_registry import COMPANY_REGISTRY
 from config.settings import SEGMENT_DISPLAY
+from components.news_filter import is_source_blocked
 
 render_sidebar()
 
@@ -411,6 +412,9 @@ def _fetch_ma_news(ticker: str) -> list[dict]:
             or item.get("publisher")
             or ""
         )
+        # Skip blocked sources
+        if is_source_blocked(provider):
+            continue
         title_lower = title.lower()
         if any(kw in title_lower for kw in MA_KEYWORDS):
             results.append({

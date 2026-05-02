@@ -14,6 +14,7 @@ from config.settings import DB_PATH, SEGMENT_DISPLAY
 from config.color_palette import SEGMENT_COLORS, SEGMENT_SHORT, GREEN, RED
 from fetcher.db_manager import DBManager
 from config.company_registry import COMPANY_REGISTRY
+from components.news_filter import filter_news, is_source_blocked
 
 # ── Global styles (DM Sans, warm background) ─────────────────────────────────
 st.markdown("""
@@ -339,6 +340,9 @@ def _fetch_healthcare_news():
         if key not in seen:
             seen.add(key)
             unique.append(a)
+
+    # Filter: block low-quality sources and require healthcare relevance
+    unique = filter_news(unique, require_hc_relevance=True)
 
     return unique[:15]
 

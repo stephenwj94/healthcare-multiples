@@ -20,6 +20,7 @@ from components.logos import logo_img_tag
 from config.color_palette import LIGHT_BADGE_STYLES, SEGMENT_SHORT
 from config.company_registry import COMPANY_REGISTRY
 from config.settings import SEGMENT_DISPLAY
+from components.news_filter import is_source_blocked
 
 render_sidebar()
 st.title("News & Earnings")
@@ -154,10 +155,11 @@ with st.spinner(f"Fetching news for {len(target_tickers)} ticker(s)…"):
                 except Exception:
                     pass
 
-# Filter news by cutoff and sort by published desc
+# Filter news by cutoff, block low-quality sources, and sort by published desc
 news_df_rows = [
     r for r in all_news
     if r["published"] is not None and r["published"] >= cutoff
+    and not is_source_blocked(r.get("provider", ""))
 ]
 news_df_rows.sort(key=lambda r: r["published"], reverse=True)
 
