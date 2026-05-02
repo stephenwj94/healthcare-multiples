@@ -278,10 +278,10 @@ with rc2:
     st.metric("% of Universe", f"{pct:.0f}%")
 with rc3:
     med_rev_x = df_result["ntm_tev_rev"].median()
-    st.metric("Median NTM EV/Rev", f"{med_rev_x:.1f}x")
+    st.metric("Median NTM EV/Rev", f"{med_rev_x:.1f}x" if pd.notna(med_rev_x) else "—")
 with rc4:
     med_gr = df_result["rev_growth_pct"].median()
-    st.metric("Median Rev Growth", f"{med_gr:.0f}%")
+    st.metric("Median Rev Growth", f"{med_gr:.0f}%" if pd.notna(med_gr) else "—")
 
 if df_result.empty:
     st.warning("No companies match all applied filters.")

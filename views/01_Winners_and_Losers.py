@@ -192,26 +192,39 @@ for seg_key in seg_keys:
     border = _hex_to_rgba(color, 0.35)
     cb_label = _CB_LABELS.get(seg_key, seg_labels[seg_key])
     aria = f"{cb_label} {_SEG_ICONS.get(seg_key, '')}"
+    # Checked state: colored pill
     _pill_css += (
-        f'/* {cb_label} pill */\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) {{\n'
+        f'/* {cb_label} pill — checked */\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked) {{\n'
         f'  background: {bg}; border: 1.5px solid {border}; border-radius: 8px;\n'
         f'  padding: 4px 8px; transition: all 0.15s ease;\n'
         f'}}\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) label p {{\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked) label p {{\n'
         f'  color: {color} !important; font-weight: 600 !important; font-size: 11px !important;\n'
         f'}}\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]):hover {{\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked):hover {{\n'
         f'  background: {_hex_to_rgba(color, 0.14)}; border-color: {_hex_to_rgba(color, 0.5)};\n'
         f'  transform: translateY(-1px); box-shadow: 0 2px 6px {_hex_to_rgba(color, 0.12)};\n'
+        f'}}\n'
+    )
+    # Unchecked state: gray pill
+    _pill_css += (
+        f'/* {cb_label} pill — unchecked */\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) {{\n'
+        f'  background: #F3F4F6; border: 1.5px solid #D1D5DB; border-radius: 8px;\n'
+        f'  padding: 4px 8px; transition: all 0.15s ease; opacity: 0.7;\n'
+        f'}}\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) label p {{\n'
+        f'  color: #9CA3AF !important; font-weight: 500 !important; font-size: 11px !important;\n'
         f'}}\n'
     )
 _pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
 
-# Equal-width segment columns + time period in one row
+# Segment columns (equal) + narrow period column
 _n_seg = len(seg_keys)
-_all_cols = st.columns(_n_seg + 1)  # segments + time period selector
+_col_spec = [1] * _n_seg + [0.7]  # period column narrower
+_all_cols = st.columns(_col_spec)
 
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
@@ -485,14 +498,9 @@ if not returns.empty:
         '</div>'
     )
 
-    # Median change by segment
-    median_chg = float(returns.median())
-    med_color = GREEN if median_chg >= 0 else RED
-    med_sign = "+" if median_chg >= 0 else ""
-
-    # Build per-segment median rows
-    _seg_medians = ""
+    # Median change by segment (sorted most positive → most negative)
     ticker_seg_map = {d["ticker"]: d["segment"] for d in filtered_data if d.get("ticker")}
+    _seg_med_list = []
     for sk in seg_keys:
         if sk not in selected_segments:
             continue
@@ -500,13 +508,18 @@ if not returns.empty:
         if not seg_ticks:
             continue
         seg_med = float(returns[seg_ticks].median())
+        _seg_med_list.append((sk, seg_med))
+    _seg_med_list.sort(key=lambda x: x[1], reverse=True)
+
+    _seg_medians = ""
+    for sk, seg_med in _seg_med_list:
         sc = SEGMENT_COLORS.get(sk, "#6B7280")
-        sn = SEGMENT_SHORT.get(sk, sk)
+        sn = _CB_LABELS.get(sk, SEGMENT_SHORT.get(sk, sk))
         s_sign = "+" if seg_med >= 0 else ""
         s_color = GREEN if seg_med >= 0 else RED
         _seg_medians += (
             f'<div style="display:flex;align-items:center;justify-content:space-between;'
-            f'padding:2px 0;font-size:11px;">'
+            f'padding:3px 0;font-size:11px;">'
             f'<span style="display:flex;align-items:center;gap:5px;">'
             f'<span style="width:7px;height:7px;border-radius:50%;background:{sc};'
             f'display:inline-block;"></span>'
@@ -519,18 +532,14 @@ if not returns.empty:
     cards += (
         '<div class="wl-stat-card">'
         f'<div class="wl-stat-label">Median {selected_period} Change</div>'
-        f'<div class="wl-stat-value" style="color:{med_color};">{med_sign}{median_chg:.1f}%</div>'
-        f'<div class="wl-stat-sub" style="margin-bottom:6px;">Overall median</div>'
         f'{_seg_medians}'
         '</div>'
     )
 
-    # Top / Bottom performers
+    # Top / Bottom performers — show 10 directly, no expand needed
     sorted_ret = returns.sort_values(ascending=False)
-    top_show = 5   # show 5 initially
-    top_all = 15   # expandable to 15
-    top_items = list(sorted_ret.head(top_all).items())
-    bot_items = list(sorted_ret.tail(top_all).sort_values(ascending=True).items())
+    top_items = list(sorted_ret.head(10).items())
+    bot_items = list(sorted_ret.tail(10).sort_values(ascending=True).items())
 
     def _perf_row(ticker, pct, color, sign=""):
         try:
@@ -557,39 +566,19 @@ if not returns.empty:
             f'</div>'
         )
 
-    # Best Performers card
-    top_visible = "".join(_perf_row(t, p, GREEN, "+") for t, p in top_items[:top_show])
-    top_extra = "".join(_perf_row(t, p, GREEN, "+") for t, p in top_items[top_show:])
-    top_expand = ""
-    if top_extra:
-        top_expand = (
-            f'<details name="perf_expand" style="margin-top:2px;">'
-            f'<summary style="font-size:10px;color:#3B82F6;cursor:pointer;font-weight:600;'
-            f'user-select:none;list-style:none;">View more ›</summary>'
-            f'<div style="margin-top:2px;">{top_extra}</div></details>'
-        )
+    top_html = "".join(_perf_row(t, p, GREEN, "+") for t, p in top_items)
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Best Performers</div>'
-        f'{top_visible}{top_expand}'
+        f'{top_html}'
         '</div>'
     )
 
-    # Worst Performers card
-    bot_visible = "".join(_perf_row(t, p, RED) for t, p in bot_items[:top_show])
-    bot_extra = "".join(_perf_row(t, p, RED) for t, p in bot_items[top_show:])
-    bot_expand = ""
-    if bot_extra:
-        bot_expand = (
-            f'<details name="perf_expand" style="margin-top:2px;">'
-            f'<summary style="font-size:10px;color:#3B82F6;cursor:pointer;font-weight:600;'
-            f'user-select:none;list-style:none;">View more ›</summary>'
-            f'<div style="margin-top:2px;">{bot_extra}</div></details>'
-        )
+    bot_html = "".join(_perf_row(t, p, RED) for t, p in bot_items)
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Worst Performers</div>'
-        f'{bot_visible}{bot_expand}'
+        f'{bot_html}'
         '</div>'
     )
 
@@ -633,7 +622,7 @@ if not close_df.empty:
             normed = seg_prices[valid_cols].div(first_valid[valid_cols]) * 100
             seg_avg = normed.mean(axis=1).dropna()
             if not seg_avg.empty:
-                short_name = SEGMENT_SHORT.get(seg_key, SEGMENT_DISPLAY.get(seg_key, seg_key))
+                short_name = _CB_LABELS.get(seg_key, SEGMENT_SHORT.get(seg_key, seg_key))
                 series_map[short_name] = (seg_avg, SEGMENT_COLORS.get(seg_key, "#6B7280"))
 
 if series_map:
@@ -670,30 +659,50 @@ if series_map:
 
     fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8", line_width=1, opacity=0.5)
 
-    # End-of-line labels
+    # Collect all y values for proper axis range
+    all_y_vals = []
+    for _, (ss, _) in series_map.items():
+        all_y_vals.extend(ss.values.tolist())
+    for _, rs in ref_series.items():
+        if rs is not None:
+            all_y_vals.extend(rs.values.tolist())
+
+    # End-of-line labels — show ACTUAL values, position adjusted to avoid overlap
     label_items = []
     for seg_name, (seg_series, seg_color) in series_map.items():
         if not seg_series.empty:
-            label_items.append((seg_name, float(seg_series.iloc[-1]), seg_color))
+            actual_val = float(seg_series.iloc[-1])
+            label_items.append((seg_name, actual_val, seg_color))
     for name, ref_s in ref_series.items():
         if not ref_s.empty:
-            label_items.append((name, float(ref_s.iloc[-1]), ref_colors.get(name, "#94A3B8")))
+            actual_val = float(ref_s.iloc[-1])
+            label_items.append((name, actual_val, ref_colors.get(name, "#94A3B8")))
 
     if label_items:
         label_items.sort(key=lambda x: x[1])
+        # Adjust Y positions for label spacing (but display actual values)
         adj_y = [it[1] for it in label_items]
         for i in range(1, len(adj_y)):
-            if adj_y[i] - adj_y[i - 1] < 8:
-                adj_y[i] = adj_y[i - 1] + 8
+            if adj_y[i] - adj_y[i - 1] < 6:
+                adj_y[i] = adj_y[i - 1] + 6
 
-        for (name, _, color), y in zip(label_items, adj_y):
+        for (name, actual_val, color), label_y in zip(label_items, adj_y):
             fig.add_annotation(
-                x=1.0, xref="paper", xanchor="left", y=y,
-                text=f"<b>{name}  {y:.0f}</b>",
+                x=1.0, xref="paper", xanchor="left", y=label_y,
+                text=f"<b>{name}  {actual_val:.0f}</b>",
                 showarrow=False, xshift=10,
                 font=dict(size=10, color="white", family="DM Sans"),
                 bgcolor=color, borderpad=5, bordercolor=color, borderwidth=1,
             )
+
+    # Compute y-axis range with padding
+    if all_y_vals:
+        y_min = min(all_y_vals)
+        y_max = max(all_y_vals)
+        y_pad = (y_max - y_min) * 0.08 or 5
+        y_range = [y_min - y_pad, y_max + y_pad]
+    else:
+        y_range = None
 
     tick_fmt = "%b '%y" if chart_months > 3 else "%b %d"
     fig.update_layout(
@@ -712,6 +721,7 @@ if series_map:
             showgrid=True, gridcolor="#F3F4F6",
             tickfont=dict(size=10, color="#9CA3AF"),
             linecolor="#E5E7EB", ticksuffix="  ",
+            range=y_range,
         ),
         hovermode="x",
         hoverlabel=dict(bgcolor="white", bordercolor="#E5E7EB",
@@ -819,8 +829,8 @@ else:
         short = (name[:26] + "\u2026") if len(name) > 27 else name
 
         seg_key = co.get("segment", "")
-        seg_name = SEGMENT_SHORT.get(seg_key, seg_key)
-        pill = _PILL_STYLES.get(seg_name, _PILL_DEFAULT)
+        seg_name = _CB_LABELS.get(seg_key, SEGMENT_SHORT.get(seg_key, seg_key))
+        pill = _PILL_STYLES.get(SEGMENT_SHORT.get(seg_key, seg_key), _PILL_DEFAULT)
 
         # TEV
         ev = co.get("enterprise_value")

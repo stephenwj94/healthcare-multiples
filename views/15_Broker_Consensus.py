@@ -346,9 +346,13 @@ if df_filtered.empty:
 # ── Summary stat cards ──────────────────────────────────────────────────────
 
 med_upside = df_filtered["upside_pct"].median()
+if pd.isna(med_upside):
+    med_upside = 0.0
 n_upside_20 = int((df_filtered["upside_pct"] > 20).sum())
 n_downside_20 = int((df_filtered["upside_pct"] < -20).sum())
 med_analysts = df_filtered["numberOfAnalystOpinions"].median()
+if pd.isna(med_analysts):
+    med_analysts = 0.0
 
 upside_color = GREEN if med_upside >= 0 else RED
 upside_sign = "+" if med_upside >= 0 else ""
