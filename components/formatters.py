@@ -335,7 +335,7 @@ SEGMENT_SHORT = {
     "pharma":          "Pharma",
     "consumer_health": "Cons Health",
     "medtech":         "MedTech",
-    "life_sci_tools":  "LST / Dx",
+    "life_sci_tools":  "LST/Dx",
     "services":        "Asset-Light",
     "cdmo":            "Asset-Heavy",
     "health_tech":     "Health Tech",

@@ -922,7 +922,7 @@ def _build_multi_segment_excel():
         ("Pharma",                              "pharma"),
         ("Consumer Health",                     "consumer_health"),
         ("MedTech",                             "medtech"),
-        ("LST / Dx",                            "life_sci_tools"),
+        ("LST/Dx",                            "life_sci_tools"),
         ("Asset-Light Services",                "services"),
         ("Asset-Heavy Services",                "cdmo"),
         ("Health Tech",                         "health_tech"),

@@ -196,17 +196,35 @@ for seg_key in seg_keys:
 _pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
 
-seg_cols = st.columns(len(seg_keys))
+# Equal-width segment columns + time period in one row
+_n_seg = len(seg_keys)
+_all_cols = st.columns(_n_seg + 1)  # segments + time period selector
+
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
     label = seg_labels[seg_key]
     icon = _SEG_ICONS.get(seg_key, "")
-    with seg_cols[i]:
+    with _all_cols[i]:
         checked = st.checkbox(
             f"{label} {icon}", value=True, key=f"ov_seg_{seg_key}",
         )
         if checked:
             selected_segments.add(seg_key)
+
+# Time period selector in the last column
+_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD", "3Y", "5Y"]
+_PERIOD_LABELS = {
+    "1W": "Last Week", "1M": "Last Month", "3M": "Last 3 Months",
+    "6M": "Last 6 Months", "12M": "Last 12 Months", "YTD": "Year to Date",
+    "3Y": "Last 3 Years", "5Y": "Last 5 Years",
+}
+
+with _all_cols[-1]:
+    selected_period = st.selectbox(
+        "Period", _PERIOD_OPTIONS, index=0,
+        key="wl_period_select",
+    )
+period_label = _PERIOD_LABELS[selected_period]
 
 # Filter data by selected segments
 filtered_data = [d for d in all_data if d.get("segment") in selected_segments]
@@ -216,20 +234,6 @@ if not filtered_data:
 
 # Full universe count (all segments)
 total_universe = len(all_data)
-
-# ── Controls row: time period ─────────────────────────────────────────────────
-_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD", "3Y", "5Y"]
-_PERIOD_LABELS = {
-    "1W": "Last Week", "1M": "Last Month", "3M": "Last 3 Months",
-    "6M": "Last 6 Months", "12M": "Last 12 Months", "YTD": "Year to Date",
-    "3Y": "Last 3 Years", "5Y": "Last 5 Years",
-}
-
-selected_period = st.radio(
-    "Time Period", _PERIOD_OPTIONS, horizontal=True, index=0,
-    key="wl_period_radio",
-)
-period_label = _PERIOD_LABELS[selected_period]
 
 
 # ── yfinance price fetch ─────────────────────────────────────────────────────

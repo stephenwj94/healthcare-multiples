@@ -11,7 +11,7 @@ SEGMENT_SHORT: dict[str, str] = {
     "pharma":          "Pharma",
     "consumer_health": "Consumer Health",
     "medtech":         "MedTech",
-    "life_sci_tools":  "LST / Dx",
+    "life_sci_tools":  "LST/Dx",
     "services":        "Asset-Light Services",
     "cdmo":            "Asset-Heavy Services",
     "health_tech":     "Health Tech",
@@ -22,7 +22,7 @@ SEG_COLOR_MAP: dict[str, str] = {
     "Pharma":                "#2563EB",   # Blue
     "Consumer Health":       "#059669",   # Green
     "MedTech":               "#DC2626",   # Red
-    "LST / Dx":              "#7C3AED",   # Purple
+    "LST/Dx":              "#7C3AED",   # Purple
     "Asset-Light Services":  "#F59E0B",   # Amber
     "Asset-Heavy Services":  "#EA580C",   # Orange
     "Health Tech":           "#0891B2",   # Cyan
@@ -49,7 +49,7 @@ BADGE_STYLES: dict[str, tuple[str, str]] = {
     "Pharma":                ("#0F1F3D", "#2563EB"),
     "Consumer Health":       ("#0A2A1F", "#059669"),
     "MedTech":               ("#3D1515", "#DC2626"),
-    "LST / Dx":              ("#231538", "#7C3AED"),
+    "LST/Dx":              ("#231538", "#7C3AED"),
     "Asset-Light Services":  ("#3D2F0F", "#F59E0B"),
     "Asset-Heavy Services":  ("#3D1F0A", "#EA580C"),
     "Health Tech":           ("#0A2A33", "#0891B2"),
@@ -64,7 +64,7 @@ LIGHT_BADGE_STYLES: dict[str, tuple[str, str]] = {
     "Pharma":                ("#E9EFFC", "#1D4ED8"),
     "Consumer Health":       ("#E6F4EE", "#047857"),
     "MedTech":               ("#FCEAEA", "#B91C1C"),
-    "LST / Dx":              ("#F1EAFB", "#6D28D9"),
+    "LST/Dx":              ("#F1EAFB", "#6D28D9"),
     "Asset-Light Services":  ("#FEF3E2", "#B45309"),
     "Asset-Heavy Services":  ("#FDECE0", "#C2410C"),
     "Health Tech":           ("#E2F1F5", "#0E7490"),
