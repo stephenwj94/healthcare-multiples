@@ -205,12 +205,21 @@ def _fetch_all_prices(tickers_tuple, months_back):
         if raw.empty:
             return pd.DataFrame()
         if isinstance(raw.columns, pd.MultiIndex):
-            close = raw["Close"].copy()
+            if "Close" in raw.columns.get_level_values(0):
+                close = raw["Close"].copy()
+            else:
+                return pd.DataFrame()
         else:
-            close = raw[["Close"]].copy()
-            if len(tickers) == 1:
-                close.columns = [tickers[0]]
-        close.index = pd.to_datetime(close.index).tz_localize(None)
+            # Single ticker or flat columns
+            if "Close" in raw.columns:
+                close = raw[["Close"]].copy()
+                if len(tickers) == 1:
+                    close.columns = [tickers[0]]
+            else:
+                close = raw.copy()
+        close.index = pd.to_datetime(close.index)
+        if close.index.tz is not None:
+            close.index = close.index.tz_localize(None)
         return close
     except Exception:
         return pd.DataFrame()
@@ -225,7 +234,7 @@ def _fetch_index_prices(months_back):
     for name, sym in [("S&P 500", "^GSPC"), ("NASDAQ", "^IXIC")]:
         try:
             hist = yf.Ticker(sym).history(start=start, auto_adjust=True)
-            if hist.index.tz:
+            if hist.index.tz is not None:
                 hist.index = hist.index.tz_localize(None)
             results[name] = hist["Close"] if not hist.empty else None
         except Exception:
@@ -342,13 +351,20 @@ if not returns.empty:
     # Best Performer card (top 3)
     top3_html = ""
     for ticker, pct in top3:
+        try:
+            pct_f = float(pct)
+            if np.isnan(pct_f):
+                continue
+            pct_str = f"+{pct_f:.0f}%"
+        except (TypeError, ValueError):
+            continue
         logo = logo_img_tag(ticker, size=14)
         logo_h = f'{logo}&nbsp;' if logo else ''
         top3_html += (
             f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
             f'{logo_h}'
             f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
-            f'<span style="color:{GREEN};font-weight:700;font-size:13px;margin-left:auto;">+{pct:.0f}%</span>'
+            f'<span style="color:{GREEN};font-weight:700;font-size:13px;margin-left:auto;">{pct_str}</span>'
             f'</div>'
         )
     cards += (
@@ -361,13 +377,20 @@ if not returns.empty:
     # Worst Performer card (bottom 3)
     bot3_html = ""
     for ticker, pct in bot3:
+        try:
+            pct_f = float(pct)
+            if np.isnan(pct_f):
+                continue
+            pct_str = f"{pct_f:.0f}%"
+        except (TypeError, ValueError):
+            continue
         logo = logo_img_tag(ticker, size=14)
         logo_h = f'{logo}&nbsp;' if logo else ''
         bot3_html += (
             f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
             f'{logo_h}'
             f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
-            f'<span style="color:{RED};font-weight:700;font-size:13px;margin-left:auto;">{pct:.0f}%</span>'
+            f'<span style="color:{RED};font-weight:700;font-size:13px;margin-left:auto;">{pct_str}</span>'
             f'</div>'
         )
     cards += (
@@ -415,9 +438,15 @@ if not close_df.empty:
                            if s == seg_key and t in hc_daily.columns]
             if not seg_tickers:
                 continue
-            seg_prices = hc_daily[seg_tickers]
+            seg_prices = hc_daily[seg_tickers].dropna(axis=1, how="all")
+            if seg_prices.empty:
+                continue
             first_valid = seg_prices.bfill().iloc[0].replace(0, np.nan)
-            normed = seg_prices.div(first_valid) * 100
+            # Drop columns where first_valid is NaN (no usable base price)
+            valid_cols = first_valid.dropna().index
+            if valid_cols.empty:
+                continue
+            normed = seg_prices[valid_cols].div(first_valid[valid_cols]) * 100
             seg_avg = normed.mean(axis=1).dropna()
             if not seg_avg.empty:
                 short_name = SEGMENT_SHORT.get(seg_key, SEGMENT_DISPLAY.get(seg_key, seg_key))
