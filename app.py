@@ -319,11 +319,8 @@ st.sidebar.markdown(
 )
 
 pg = st.navigation({
-    "Home": [
-        st.Page("views/00_Home.py",                    title="Home",                  icon=":material/home:", default=True),
-    ],
     "Overview": [
-        st.Page("views/01_Winners_and_Losers.py",     title="Winners & Losers",        icon=":material/trending_up:"),
+        st.Page("views/01_Winners_and_Losers.py",     title="Overview",                icon=":material/trending_up:", default=True),
         st.Page("views/02_Valuation_Lookback.py",     title="Valuation Lookback",      icon=":material/history:"),
         st.Page("views/03_Valuation_Regression.py",   title="Valuation Regression",    icon=":material/analytics:"),
     ],

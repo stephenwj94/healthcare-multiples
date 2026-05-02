@@ -1,7 +1,8 @@
 """
-Winners & Losers — biggest movers across the healthcare universe.
+Overview — biggest movers across the healthcare universe.
 
 Single yfinance fetch powers: stat cards, benchmark chart, and movers table.
+Segment checkboxes at the top filter the entire page.
 """
 
 import streamlit as st
@@ -57,12 +58,6 @@ h1,h2,h3,h4,h5,h6 { color: #111827 !important; }
 }
 .wl-stat-value { font-size: 30px; font-weight: 800; color: #111827; line-height: 1.2; }
 .wl-stat-sub { font-size: 13px; color: #9CA3AF; margin-top: 4px; }
-
-/* Category pills */
-.wl-pill {
-    padding: 2px 8px; border-radius: 4px; font-size: 10px;
-    font-weight: 500; display: inline-block; white-space: nowrap;
-}
 
 /* Combined table */
 .comb-outer {
@@ -128,22 +123,47 @@ date_str = as_of.strftime("%B %d, %Y")
 # ── Page header ───────────────────────────────────────────────────────────────
 st.markdown(
     f'<div style="background:#F0F4FF;border-radius:12px;padding:24px 32px;'
-    f'margin-bottom:24px;border:1px solid #DBEAFE;border-left:4px solid #3B82F6;">'
+    f'margin-bottom:16px;border:1px solid #DBEAFE;border-left:4px solid #3B82F6;">'
     f'<div style="font-size:28px;font-weight:800;color:#111827;margin-bottom:4px;">'
-    f'Winners &amp; Losers</div>'
+    f'Overview</div>'
     f'<div style="font-size:14px;color:#6B7280;font-weight:500;">'
-    f'Biggest movers across the healthcare universe'
+    f'Healthcare universe performance &amp; biggest movers'
     f'&nbsp;&nbsp;&middot;&nbsp;&nbsp;'
     f'<span style="color:#9CA3AF;">Data as of {date_str}</span>'
     f'</div></div>',
     unsafe_allow_html=True,
 )
 
-# ── Period selector ───────────────────────────────────────────────────────────
-_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD"]
+# ── Segment filter checkboxes (top of page, filters everything) ──────────────
+# Build segment color-coded checkboxes
+seg_keys = list(SEGMENT_DISPLAY.keys())
+seg_labels = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
+
+# Use columns for segment checkboxes with colored dots
+seg_cols = st.columns(len(seg_keys))
+selected_segments = set()
+for i, seg_key in enumerate(seg_keys):
+    label = seg_labels[seg_key]
+    color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+    with seg_cols[i]:
+        if st.checkbox(label, value=True, key=f"ov_seg_{seg_key}"):
+            selected_segments.add(seg_key)
+
+# Filter data by selected segments
+filtered_data = [d for d in all_data if d.get("segment") in selected_segments]
+if not filtered_data:
+    st.warning("No segments selected. Select at least one segment above.")
+    st.stop()
+
+# Full universe count (all segments)
+total_universe = len(all_data)
+
+# ── Controls row: time period ─────────────────────────────────────────────────
+_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD", "3Y", "5Y"]
 _PERIOD_LABELS = {
     "1W": "Last Week", "1M": "Last Month", "3M": "Last 3 Months",
     "6M": "Last 6 Months", "12M": "Last 12 Months", "YTD": "Year to Date",
+    "3Y": "Last 3 Years", "5Y": "Last 5 Years",
 }
 
 selected_period = st.radio(
@@ -153,7 +173,7 @@ selected_period = st.radio(
 period_label = _PERIOD_LABELS[selected_period]
 
 
-# ── yfinance price fetch (single call, cached) ───────────────────────────────
+# ── yfinance price fetch ─────────────────────────────────────────────────────
 def _period_start(period, ref_date):
     ref = pd.Timestamp(ref_date)
     if period == "1W":  return ref - pd.Timedelta(weeks=1)
@@ -162,15 +182,23 @@ def _period_start(period, ref_date):
     if period == "6M":  return ref - pd.DateOffset(months=6)
     if period == "12M": return ref - pd.DateOffset(months=12)
     if period == "YTD": return pd.Timestamp(f"{ref.year - 1}-12-31")
+    if period == "3Y":  return ref - pd.DateOffset(years=3)
+    if period == "5Y":  return ref - pd.DateOffset(years=5)
     return ref - pd.Timedelta(weeks=1)
 
 
+def _chart_lookback_months(period):
+    """How many months of chart data to show for the segment performance chart."""
+    return {"1W": 1, "1M": 3, "3M": 6, "6M": 12, "12M": 12,
+            "YTD": 12, "3Y": 36, "5Y": 60}.get(period, 12)
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_all_prices(tickers_tuple):
-    """Batch-download 14 months of adj-close prices from yfinance."""
+def _fetch_all_prices(tickers_tuple, months_back):
+    """Batch-download prices from yfinance."""
     import yfinance as yf
     tickers = list(tickers_tuple)
-    start = (pd.Timestamp.today() - pd.DateOffset(months=14)).strftime("%Y-%m-%d")
+    start = (pd.Timestamp.today() - pd.DateOffset(months=months_back)).strftime("%Y-%m-%d")
     try:
         raw = yf.download(tickers, start=start, auto_adjust=True,
                           progress=False, threads=True)
@@ -189,10 +217,10 @@ def _fetch_all_prices(tickers_tuple):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_index_prices():
+def _fetch_index_prices(months_back):
     """Download S&P 500 and NASDAQ index closes."""
     import yfinance as yf
-    start = (pd.Timestamp.today() - pd.DateOffset(months=14)).strftime("%Y-%m-%d")
+    start = (pd.Timestamp.today() - pd.DateOffset(months=months_back)).strftime("%Y-%m-%d")
     results = {}
     for name, sym in [("S&P 500", "^GSPC"), ("NASDAQ", "^IXIC")]:
         try:
@@ -205,8 +233,12 @@ def _fetch_index_prices():
     return results
 
 
-def _compute_returns(close_df, ref_date, period):
-    """Returns Series(ticker -> pct_return) for the given period."""
+def _compute_returns(close_df, ref_date, period, ticker_list=None):
+    """Returns Series(ticker -> pct_return) for the given period.
+
+    If ticker_list is provided, only includes those tickers (but still returns
+    data for all that have prices — never drops tickers that exist in close_df).
+    """
     if close_df.empty:
         return pd.Series(dtype=float)
     ref = pd.Timestamp(ref_date)
@@ -222,60 +254,68 @@ def _compute_returns(close_df, ref_date, period):
     common = cur.index.intersection(past.index)
     if common.empty:
         return pd.Series(dtype=float)
+    if ticker_list is not None:
+        common = common.intersection(pd.Index(ticker_list))
+        if common.empty:
+            return pd.Series(dtype=float)
     past_safe = past[common].replace(0, np.nan)
     ret = ((cur[common] / past_safe) - 1) * 100
     return ret.dropna()
 
 
 # ── Fetch prices ──────────────────────────────────────────────────────────────
-tickers = sorted({d.get("ticker") for d in all_data if d.get("ticker")})
+# Always fetch ALL tickers (full universe) so segment filtering doesn't re-fetch
+all_tickers = sorted({d.get("ticker") for d in all_data if d.get("ticker")})
+# Filtered tickers for the selected segments
+filtered_tickers = sorted({d.get("ticker") for d in filtered_data if d.get("ticker")})
+
+# Determine how much history we need
+months_needed = max(
+    _chart_lookback_months(selected_period) + 2,  # chart needs this
+    {"3Y": 38, "5Y": 62}.get(selected_period, 14),  # returns need this
+)
 
 with st.spinner("Loading price data from Yahoo Finance..."):
-    close_df = _fetch_all_prices(tuple(tickers))
-    index_prices = _fetch_index_prices()
+    close_df = _fetch_all_prices(tuple(all_tickers), months_needed)
+    index_prices = _fetch_index_prices(months_needed)
 
-returns = _compute_returns(close_df, as_of, selected_period)
+# Compute returns only for filtered tickers
+returns = _compute_returns(close_df, as_of, selected_period, filtered_tickers)
 
 # ── Stat cards ────────────────────────────────────────────────────────────────
+ticker_to_co = {d["ticker"]: d for d in all_data if d.get("ticker")}
+
+# Universe count = total filtered companies (not just those with return data)
+universe_count = len(filtered_data)
+
+cards = '<div class="wl-stat-grid">'
+
+# Universe card with expandable company list
+from config.company_registry import COMPANY_REGISTRY
+filtered_companies = sorted(
+    [c for c in COMPANY_REGISTRY if c["segment"] in selected_segments],
+    key=lambda c: c["name"],
+)
+
+cards += (
+    '<div class="wl-stat-card">'
+    '<div class="wl-stat-label">Universe</div>'
+    f'<div class="wl-stat-value">{universe_count}</div>'
+    f'<div class="wl-stat-sub">of {total_universe} total companies</div>'
+    '</div>'
+)
+
+# Advancing / Declining
 if not returns.empty:
-    total = len(returns)
+    total_with_data = len(returns)
     up_count = int((returns >= 0).sum())
-    down_count = total - up_count
-    median_chg = float(returns.median())
-    pct_adv = up_count / total * 100 if total else 0
+    down_count = total_with_data - up_count
+    pct_adv = up_count / total_with_data * 100 if total_with_data else 0
 
-    best_ticker = returns.idxmax()
-    worst_ticker = returns.idxmin()
-    best_pct = float(returns.max())
-    worst_pct = float(returns.min())
-
-    ticker_to_co = {d["ticker"]: d for d in all_data if d.get("ticker")}
-    best_name = ticker_to_co.get(best_ticker, {}).get("name", best_ticker)
-    worst_name = ticker_to_co.get(worst_ticker, {}).get("name", worst_ticker)
-
-    med_color = GREEN if median_chg >= 0 else RED
-    med_sign = "+" if median_chg >= 0 else ""
-    adv_color = GREEN if pct_adv >= 50 else RED
-
-    best_logo = logo_img_tag(best_ticker, size=18)
-    worst_logo = logo_img_tag(worst_ticker, size=18)
-
-    cards = '<div class="wl-stat-grid">'
-
-    # Universe
-    cards += (
-        '<div class="wl-stat-card">'
-        '<div class="wl-stat-label">Universe</div>'
-        f'<div class="wl-stat-value">{total}</div>'
-        f'<div class="wl-stat-sub">companies with {period_label.lower()} data</div>'
-        '</div>'
-    )
-
-    # Advancing / Declining
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Advancing / Declining</div>'
-        f'<div class="wl-stat-value" style="color:{adv_color};">{pct_adv:.0f}%</div>'
+        f'<div class="wl-stat-value">{pct_adv:.0f}%</div>'
         f'<div class="wl-stat-sub">'
         f'<span style="color:{GREEN};font-weight:700;">{up_count}</span> up &nbsp; '
         f'<span style="color:{RED};font-weight:700;">{down_count}</span> down'
@@ -283,6 +323,9 @@ if not returns.empty:
     )
 
     # Median change
+    median_chg = float(returns.median())
+    med_color = GREEN if median_chg >= 0 else RED
+    med_sign = "+" if median_chg >= 0 else ""
     cards += (
         '<div class="wl-stat-card">'
         f'<div class="wl-stat-label">Median {selected_period} Change</div>'
@@ -291,54 +334,83 @@ if not returns.empty:
         '</div>'
     )
 
-    # Best performer
-    best_short = (best_name[:22] + "...") if len(best_name) > 25 else best_name
+    # Top 3 / Bottom 3 performers
+    sorted_ret = returns.sort_values(ascending=False)
+    top3 = list(sorted_ret.head(3).items())
+    bot3 = list(sorted_ret.tail(3).sort_values(ascending=True).items())
+
+    # Best Performer card (top 3)
+    top3_html = ""
+    for ticker, pct in top3:
+        logo = logo_img_tag(ticker, size=14)
+        logo_h = f'{logo}&nbsp;' if logo else ''
+        top3_html += (
+            f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
+            f'{logo_h}'
+            f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
+            f'<span style="color:{GREEN};font-weight:700;font-size:13px;margin-left:auto;">+{pct:.0f}%</span>'
+            f'</div>'
+        )
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Best Performer</div>'
-        f'<div class="wl-stat-value" style="color:{GREEN};">+{best_pct:.1f}%</div>'
-        f'<div class="wl-stat-sub">'
-        f'{best_logo + "&nbsp;" if best_logo else ""}'
-        f'<span style="font-weight:600;color:#111827;">{best_ticker}</span> '
-        f'{_html_lib.escape(best_short)}</div>'
+        f'{top3_html}'
         '</div>'
     )
 
-    # Worst performer
-    worst_short = (worst_name[:22] + "...") if len(worst_name) > 25 else worst_name
+    # Worst Performer card (bottom 3)
+    bot3_html = ""
+    for ticker, pct in bot3:
+        logo = logo_img_tag(ticker, size=14)
+        logo_h = f'{logo}&nbsp;' if logo else ''
+        bot3_html += (
+            f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
+            f'{logo_h}'
+            f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
+            f'<span style="color:{RED};font-weight:700;font-size:13px;margin-left:auto;">{pct:.0f}%</span>'
+            f'</div>'
+        )
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Worst Performer</div>'
-        f'<div class="wl-stat-value" style="color:{RED};">{worst_pct:.1f}%</div>'
-        f'<div class="wl-stat-sub">'
-        f'{worst_logo + "&nbsp;" if worst_logo else ""}'
-        f'<span style="font-weight:600;color:#111827;">{worst_ticker}</span> '
-        f'{_html_lib.escape(worst_short)}</div>'
+        f'{bot3_html}'
         '</div>'
     )
 
-    cards += '</div>'
-    st.markdown(cards, unsafe_allow_html=True)
+cards += '</div>'
+st.markdown(cards, unsafe_allow_html=True)
+
+# Universe company list (expandable)
+with st.expander(f"View all {universe_count} companies in selected segments"):
+    comp_df = pd.DataFrame([
+        {"Company": c["name"], "Ticker": c["ticker"],
+         "Segment": SEGMENT_SHORT.get(c["segment"], c["segment"])}
+        for c in filtered_companies
+    ])
+    st.dataframe(comp_df, use_container_width=True, hide_index=True, height=400)
 
 
-# ── Benchmark chart: segment lines rebased to 100 ────────────────────────────
+# ── Segment performance chart ─────────────────────────────────────────────────
+chart_months = _chart_lookback_months(selected_period)
+chart_start = as_of - pd.DateOffset(months=chart_months)
+
 st.markdown(
     '<div style="font-size:16px;font-weight:700;color:#111827;'
     'margin-bottom:2px;margin-top:8px;">Segment Performance</div>'
-    '<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">'
-    'Equal-weighted segment price indices, rebased to 100 at 12 months ago</div>',
+    f'<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">'
+    f'Equal-weighted segment price indices, rebased to 100 ({period_label.lower()})</div>',
     unsafe_allow_html=True,
 )
 
-# Build per-segment indices
 ticker_segment = {d["ticker"]: d["segment"] for d in all_data if d.get("ticker") and d.get("segment")}
-start_12m = as_of - pd.DateOffset(months=12)
 
 series_map = {}
 if not close_df.empty:
-    hc_daily = close_df[(close_df.index >= start_12m) & (close_df.index <= as_of)]
+    hc_daily = close_df[(close_df.index >= chart_start) & (close_df.index <= as_of)]
     if not hc_daily.empty:
-        for seg_key, seg_name in SEGMENT_DISPLAY.items():
+        for seg_key in seg_keys:
+            if seg_key not in selected_segments:
+                continue
             seg_tickers = [t for t, s in ticker_segment.items()
                            if s == seg_key and t in hc_daily.columns]
             if not seg_tickers:
@@ -348,19 +420,10 @@ if not close_df.empty:
             normed = seg_prices.div(first_valid) * 100
             seg_avg = normed.mean(axis=1).dropna()
             if not seg_avg.empty:
-                short_name = SEGMENT_SHORT.get(seg_key, seg_name)
+                short_name = SEGMENT_SHORT.get(seg_key, SEGMENT_DISPLAY.get(seg_key, seg_key))
                 series_map[short_name] = (seg_avg, SEGMENT_COLORS.get(seg_key, "#6B7280"))
 
-# Segment checkboxes
 if series_map:
-    seg_names = list(series_map.keys())
-    cols = st.columns(min(len(seg_names), 7))
-    visible = []
-    for i, name in enumerate(seg_names):
-        with cols[i % len(cols)]:
-            if st.checkbox(name, value=True, key=f"seg_vis_{name}"):
-                visible.append(name)
-
     fig = go.Figure()
 
     # Reference indices (S&P, NASDAQ)
@@ -369,7 +432,7 @@ if series_map:
     for name in ["S&P 500", "NASDAQ"]:
         s = index_prices.get(name)
         if s is not None and not s.empty:
-            s = s[(s.index >= start_12m) & (s.index <= as_of)]
+            s = s[(s.index >= chart_start) & (s.index <= as_of)]
             if not s.empty:
                 base = s.iloc[0]
                 if base and base != 0:
@@ -385,12 +448,10 @@ if series_map:
 
     # Segment lines
     for seg_name, (seg_series, seg_color) in series_map.items():
-        is_visible = seg_name in visible
         fig.add_trace(go.Scatter(
             x=seg_series.index, y=seg_series.values, name=seg_name,
             mode="lines",
             line=dict(color=seg_color, width=2.5),
-            visible=True if is_visible else "legendonly",
             hovertemplate=f"<b>{seg_name}</b>: %{{y:.1f}}<extra></extra>",
         ))
 
@@ -399,27 +460,29 @@ if series_map:
     # End-of-line labels
     label_items = []
     for seg_name, (seg_series, seg_color) in series_map.items():
-        if seg_name in visible and not seg_series.empty:
+        if not seg_series.empty:
             label_items.append((seg_name, float(seg_series.iloc[-1]), seg_color))
     for name, ref_s in ref_series.items():
         if not ref_s.empty:
             label_items.append((name, float(ref_s.iloc[-1]), ref_colors.get(name, "#94A3B8")))
 
-    label_items.sort(key=lambda x: x[1])
-    adj_y = [it[1] for it in label_items]
-    for i in range(1, len(adj_y)):
-        if adj_y[i] - adj_y[i - 1] < 8:
-            adj_y[i] = adj_y[i - 1] + 8
+    if label_items:
+        label_items.sort(key=lambda x: x[1])
+        adj_y = [it[1] for it in label_items]
+        for i in range(1, len(adj_y)):
+            if adj_y[i] - adj_y[i - 1] < 8:
+                adj_y[i] = adj_y[i - 1] + 8
 
-    for (name, _, color), y in zip(label_items, adj_y):
-        fig.add_annotation(
-            x=1.0, xref="paper", xanchor="left", y=y,
-            text=f"<b>{name}  {y:.0f}</b>",
-            showarrow=False, xshift=10,
-            font=dict(size=10, color="white", family="DM Sans"),
-            bgcolor=color, borderpad=5, bordercolor=color, borderwidth=1,
-        )
+        for (name, _, color), y in zip(label_items, adj_y):
+            fig.add_annotation(
+                x=1.0, xref="paper", xanchor="left", y=y,
+                text=f"<b>{name}  {y:.0f}</b>",
+                showarrow=False, xshift=10,
+                font=dict(size=10, color="white", family="DM Sans"),
+                bgcolor=color, borderpad=5, bordercolor=color, borderwidth=1,
+            )
 
+    tick_fmt = "%b '%y" if chart_months > 3 else "%b %d"
     fig.update_layout(
         height=380,
         margin=dict(l=40, r=180, t=10, b=40),
@@ -427,10 +490,10 @@ if series_map:
         font=dict(family="DM Sans, sans-serif"),
         showlegend=False,
         xaxis=dict(
-            showgrid=False, tickformat="%b '%y",
+            showgrid=False, tickformat=tick_fmt,
             tickfont=dict(size=10, color="#9CA3AF"),
             linecolor="#E5E7EB", fixedrange=True,
-            range=[start_12m, as_of], constrain="domain",
+            range=[chart_start, as_of], constrain="domain",
         ),
         yaxis=dict(
             showgrid=True, gridcolor="#F3F4F6",
@@ -486,17 +549,22 @@ if not returns.empty:
                     config={"displayModeBar": False, "scrollZoom": False})
 
 
-# ── Category pill styles ──────────────────────────────────────────────────────
+# ── Category pill styles (tied to segment chart colors) ───────────────────────
 _PILL_BASE = "padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;display:inline-block;white-space:nowrap;"
-_PILL_STYLES = {
-    "Pharma":               f"background:#E9EFFC;color:#1D4ED8;{_PILL_BASE}",
-    "Consumer Health":      f"background:#E6F4EE;color:#047857;{_PILL_BASE}",
-    "MedTech":              f"background:#FCEAEA;color:#B91C1C;{_PILL_BASE}",
-    "LST / Dx":             f"background:#F1EAFB;color:#6D28D9;{_PILL_BASE}",
-    "Asset-Light Services": f"background:#FEF3E2;color:#B45309;{_PILL_BASE}",
-    "Asset-Heavy Services": f"background:#FDECE0;color:#C2410C;{_PILL_BASE}",
-    "Health Tech":          f"background:#E2F1F5;color:#0E7490;{_PILL_BASE}",
-}
+
+# Generate pill styles from SEGMENT_COLORS so they match the chart
+def _pill_style_from_color(hex_color):
+    """Create a light-bg pill style from the segment's chart color."""
+    # Parse hex to RGB, then create a 10% opacity background
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"background:rgba({r},{g},{b},0.10);color:{hex_color};{_PILL_BASE}"
+
+_PILL_STYLES = {}
+for _sk, _sn in SEGMENT_SHORT.items():
+    _sc = SEGMENT_COLORS.get(_sk)
+    if _sc:
+        _PILL_STYLES[_sn] = _pill_style_from_color(_sc)
 _PILL_DEFAULT = f"background:#F1F5F9;color:#64748B;{_PILL_BASE}"
 
 
@@ -510,10 +578,8 @@ st.markdown(
 )
 
 if returns.empty:
-    st.info(f"No price data available for {period_label}.")
+    st.info(f"No price data available for {period_label}. Try a shorter time period.")
 else:
-    ticker_to_co = {d["ticker"]: d for d in all_data if d.get("ticker")}
-
     sorted_ret = returns.sort_values(ascending=False)
     winners = list(sorted_ret.head(25).items())
     losers = list(sorted_ret.tail(25).sort_values(ascending=True).items())
@@ -546,25 +612,36 @@ else:
         # TEV
         ev = co.get("enterprise_value")
         try:
-            ev = float(ev)
-            tev_str = f"${ev/1e9:.1f}B" if ev >= 1e9 else f"${ev/1e6:.0f}M"
+            ev_f = float(ev)
+            if np.isnan(ev_f) or ev_f <= 0:
+                tev_str = "\u2014"
+            elif ev_f >= 1e9:
+                tev_str = f"${ev_f/1e9:.1f}B"
+            else:
+                tev_str = f"${ev_f/1e6:.0f}M"
         except (TypeError, ValueError):
             tev_str = "\u2014"
 
         # NTM Rev multiple
         rev_x = co.get("ntm_tev_rev")
         try:
-            rev_x = float(rev_x)
-            rev_str = f"{rev_x:.1f}x" if 0 < rev_x <= 75 else "N/M"
+            rev_f = float(rev_x)
+            if np.isnan(rev_f) or rev_f <= 0 or rev_f > 75:
+                rev_str = "N/M"
+            else:
+                rev_str = f"{rev_f:.1f}x"
         except (TypeError, ValueError):
             rev_str = "N/M"
 
         # NTM Growth
         gr = co.get("ntm_revenue_growth")
         try:
-            gr = float(gr) * 100
-            gr_color = "#16A34A" if gr >= 15 else "#374151" if gr >= 5 else "#DC2626"
-            gr_str = f'<span style="color:{gr_color};">{"+" if gr >= 0 else ""}{gr:.0f}%</span>'
+            gr_f = float(gr) * 100
+            if np.isnan(gr_f):
+                gr_str = "\u2014"
+            else:
+                gr_color = "#16A34A" if gr_f >= 15 else "#374151" if gr_f >= 5 else "#DC2626"
+                gr_str = f'<span style="color:{gr_color};">{"+" if gr_f >= 0 else ""}{gr_f:.0f}%</span>'
         except (TypeError, ValueError):
             gr_str = "\u2014"
 
@@ -605,18 +682,19 @@ else:
         tbody += _make_row(i, ticker, pct, "winners")
 
     # Losers header
-    tbody += (
-        '<tr><td colspan="8" style="padding:0;background:white;border-top:2px solid #E2E8F0;">'
-        '<div style="display:flex;align-items:center;gap:8px;'
-        'padding:10px 12px 6px 12px;border-left:3px solid #DC2626;'
-        'background:linear-gradient(90deg,rgba(220,38,38,0.05),transparent 40%);">'
-        '<span style="font-size:14px;font-weight:800;color:#DC2626;'
-        'text-transform:uppercase;letter-spacing:0.05em;">Top 25 Losers</span>'
-        f'<span style="font-size:12px;color:#94A3B8;">{period_label}</span>'
-        '</div></td></tr>'
-    )
-    for i, (ticker, pct) in enumerate(losers, 1):
-        tbody += _make_row(i, ticker, pct, "losers")
+    if losers:
+        tbody += (
+            '<tr><td colspan="8" style="padding:0;background:white;border-top:2px solid #E2E8F0;">'
+            '<div style="display:flex;align-items:center;gap:8px;'
+            'padding:10px 12px 6px 12px;border-left:3px solid #DC2626;'
+            'background:linear-gradient(90deg,rgba(220,38,38,0.05),transparent 40%);">'
+            '<span style="font-size:14px;font-weight:800;color:#DC2626;'
+            'text-transform:uppercase;letter-spacing:0.05em;">Top 25 Losers</span>'
+            f'<span style="font-size:12px;color:#94A3B8;">{period_label}</span>'
+            '</div></td></tr>'
+        )
+        for i, (ticker, pct) in enumerate(losers, 1):
+            tbody += _make_row(i, ticker, pct, "losers")
 
     tbody += "</tbody>"
 
