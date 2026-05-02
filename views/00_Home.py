@@ -177,17 +177,19 @@ st.markdown(
 # ── Market Summary Cards ─────────────────────────────────────────────────────
 total_companies = len(df)
 median_ntm_rev = df["ntm_tev_rev"].dropna().median()
+median_ntm_ebitda = df["ntm_tev_ebitda"].dropna().median() if "ntm_tev_ebitda" in df.columns else None
+median_rev_growth = df["ntm_revenue_growth"].dropna().median() if "ntm_revenue_growth" in df.columns else None
 median_2w = df["price_change_2w"].dropna().median() if "price_change_2w" in df.columns else None
-median_2m = df["price_change_2m"].dropna().median() if "price_change_2m" in df.columns else None
 
 
 def _fmt_pct(val):
-    """Format a percentage value with sign and color."""
+    """Format a decimal ratio (e.g. 0.04 = 4%) with sign and color."""
     if val is None or pd.isna(val):
         return '<span style="color:#9CA3AF;">--</span>'
-    color = GREEN if val >= 0 else RED
-    sign = "+" if val > 0 else ""
-    return f'<span style="color:{color};">{sign}{val:.1f}%</span>'
+    pct = val * 100
+    color = GREEN if pct >= 0 else RED
+    sign = "+" if pct > 0 else ""
+    return f'<span style="color:{color};">{sign}{pct:.1f}%</span>'
 
 
 cards_html = '<div class="summary-cards">'
@@ -210,20 +212,31 @@ cards_html += (
     '</div>'
 )
 
-# Median 2-week change
+# Median NTM EV/EBITDA
+ebitda_str = f"{median_ntm_ebitda:.1f}x" if median_ntm_ebitda and pd.notna(median_ntm_ebitda) else "--"
+cards_html += (
+    '<div class="summary-card">'
+    '<div class="label">Median NTM EV / EBITDA</div>'
+    f'<div class="value">{ebitda_str}</div>'
+    '<div class="delta" style="color:#9CA3AF;">across universe</div>'
+    '</div>'
+)
+
+# Median NTM Revenue Growth
+growth_str = _fmt_pct(median_rev_growth) if median_rev_growth is not None else '--'
+cards_html += (
+    '<div class="summary-card">'
+    '<div class="label">Median NTM Revenue Growth</div>'
+    f'<div class="value">{growth_str}</div>'
+    '<div class="delta" style="color:#9CA3AF;">across universe</div>'
+    '</div>'
+)
+
+# Median 2-week price change
 cards_html += (
     '<div class="summary-card">'
     '<div class="label">Median 2-Week Change</div>'
     f'<div class="value">{_fmt_pct(median_2w)}</div>'
-    '<div class="delta" style="color:#9CA3AF;">price performance</div>'
-    '</div>'
-)
-
-# Median 2-month change
-cards_html += (
-    '<div class="summary-card">'
-    '<div class="label">Median 2-Month Change</div>'
-    f'<div class="value">{_fmt_pct(median_2m)}</div>'
     '<div class="delta" style="color:#9CA3AF;">price performance</div>'
     '</div>'
 )
@@ -254,7 +267,7 @@ if "price_change_2w" in df.columns:
         html += '<th>Ticker</th><th>Company</th><th>Segment</th><th style="text-align:right;">2W Chg</th>'
         html += '</tr></thead><tbody>'
         for _, r in rows.iterrows():
-            chg = r["price_change_2w"]
+            chg = r["price_change_2w"] * 100
             color = GREEN if chg >= 0 else RED
             sign = "+" if chg > 0 else ""
             seg_display = SEGMENT_SHORT.get(r.get("segment", ""), r.get("segment", ""))
