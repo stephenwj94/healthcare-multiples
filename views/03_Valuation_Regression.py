@@ -810,7 +810,7 @@ def _render_scatter_tab(all_data, tab_key):
         y_metric = st.selectbox(
             "Y-AXIS",
             options=["NTM Revenue Growth %", "Rule of X"],
-            index=2,
+            index=0,
             key=f"sc_yax_{tab_key}",
         )
 

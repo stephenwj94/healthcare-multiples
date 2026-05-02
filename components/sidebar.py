@@ -4,11 +4,53 @@ Shared sidebar component — dark rail, institutional style.
 
 import streamlit as st
 import sys
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import DB_PATH
 from fetcher.db_manager import DBManager
+
+# US Eastern timezone offset helper
+_EST = timezone(timedelta(hours=-5))
+_EDT = timezone(timedelta(hours=-4))
+
+
+def _utc_to_est(utc_str: str):
+    """Convert a UTC datetime string to both UTC and EST display strings.
+
+    Handles EDT (Mar-Nov) vs EST (Nov-Mar) automatically.
+    Returns (date_str, utc_time_str, est_time_str, tz_label).
+    """
+    try:
+        # Parse the stored timestamp (expected: "YYYY-MM-DD HH:MM..." or ISO)
+        dt_utc = datetime.strptime(utc_str[:16], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+    # Simple US Eastern DST rule: 2nd Sunday Mar -> 1st Sunday Nov
+    year = dt_utc.year
+    # March: 2nd Sunday
+    mar1 = datetime(year, 3, 1, tzinfo=timezone.utc)
+    dst_start = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7)  # 2nd Sunday
+    dst_start = dst_start.replace(hour=7)  # 2 AM ET = 7 AM UTC
+    # November: 1st Sunday
+    nov1 = datetime(year, 11, 1, tzinfo=timezone.utc)
+    dst_end = nov1 + timedelta(days=(6 - nov1.weekday()) % 7)  # 1st Sunday
+    dst_end = dst_end.replace(hour=6)  # 1 AM EST = 6 AM UTC
+
+    if dst_start <= dt_utc < dst_end:
+        eastern = _EDT
+        tz_label = "EDT"
+    else:
+        eastern = _EST
+        tz_label = "EST"
+
+    dt_est = dt_utc.astimezone(eastern)
+    date_str = dt_utc.strftime("%Y-%m-%d")
+    utc_time_str = dt_utc.strftime("%H:%M")
+    est_time_str = dt_est.strftime("%H:%M")
+    return date_str, utc_time_str, est_time_str, tz_label
 
 
 def render_sidebar():
@@ -41,6 +83,14 @@ section[data-testid="stSidebar"] {
     visibility: visible !important;
     display: flex !important;
     opacity: 1 !important;
+}
+
+/* ── Fixed sidebar — no scrolling ── */
+section[data-testid="stSidebar"] > div:first-child {
+    overflow: hidden !important;
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    overflow: hidden !important;
 }
 
 /* ── Sidebar shell — dark control panel ── */
@@ -144,7 +194,7 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
 
     # ── Brand header — sits at the top of the sidebar ──────────────────────────
     brand_svg = (
-        "<svg width='26' height='26' viewBox='0 0 26 26' xmlns='http://www.w3.org/2000/svg' "
+        "<svg width='30' height='30' viewBox='0 0 26 26' xmlns='http://www.w3.org/2000/svg' "
         "style='flex-shrink:0;'>"
         "<defs>"
         "<linearGradient id='pmrBars' x1='0' y1='0' x2='1' y2='1'>"
@@ -170,7 +220,7 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
         "<div style='font-size:14px;font-weight:600;color:#F1F5F9;'>"
         "Market Screening</div>"
         "<div style='font-size:10.5px;color:#64748B;font-weight:500;margin-top:2px;"
-        "letter-spacing:0.02em;'>Permira &middot; Healthcare Investments</div>"
+        "letter-spacing:0.02em;'>Healthcare Investments</div>"
         "</div>"
         "</div>",
         unsafe_allow_html=True,
@@ -181,16 +231,36 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
     try:
         last_fetch = db.get_last_fetch_time()
         if last_fetch:
-            date_str = last_fetch[:10]
-            time_str = last_fetch[11:16]
+            result = _utc_to_est(last_fetch)
+            if result:
+                date_str, utc_time, est_time, tz_label = result
+            else:
+                date_str = last_fetch[:10]
+                utc_time = last_fetch[11:16]
+                est_time = None
+                tz_label = "EST"
+
+            # Build time display line
+            if est_time:
+                time_display = (
+                    f"<p style='font-size:11px;color:#94A3B8;margin:0;'>"
+                    f"{utc_time} UTC &nbsp;/&nbsp; {est_time} {tz_label}</p>"
+                )
+            else:
+                time_display = (
+                    f"<p style='font-size:11px;color:#94A3B8;margin:0;'>"
+                    f"{utc_time} UTC</p>"
+                )
+
             st.sidebar.markdown(
-                "<div style='background:#1E293B;border:1px solid #334155;border-radius:4px;padding:10px 12px;margin-bottom:8px;'>"
+                "<div style='background:linear-gradient(135deg, #1E293B 0%, #1a2332 100%);"
+                "border:1px solid #334155;border-radius:4px;padding:10px 12px;margin-bottom:8px;'>"
                 "<p style='font-size:10px;font-weight:700;color:#64748B;"
                 "text-transform:uppercase;letter-spacing:0.10em;margin:0 0 5px 0;'>"
                 "Last Updated</p>"
                 f"<p style='font-size:13px;font-weight:600;color:#FFFFFF;margin:0 0 1px 0;'>"
                 f"{date_str}</p>"
-                f"<p style='font-size:11px;color:#94A3B8;margin:0;'>{time_str} UTC</p>"
+                f"{time_display}"
                 "</div>",
                 unsafe_allow_html=True,
             )
@@ -205,13 +275,33 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
             unsafe_allow_html=True,
         )
 
-    # ── Data source ────────────────────────────────────────────────────────────
+    # ── Data sources ───────────────────────────────────────────────────────────
     st.sidebar.markdown(
-        "<div style='background:#1E293B;border:1px solid #334155;border-radius:4px;padding:10px 12px;'>"
+        "<div style='background:linear-gradient(135deg, #1E293B 0%, #1a2536 50%, #1E293B 100%);"
+        "border:1px solid #334155;border-radius:4px;padding:10px 12px;'>"
         "<p style='font-size:10px;font-weight:700;color:#64748B;"
-        "text-transform:uppercase;letter-spacing:0.10em;margin:0 0 5px 0;'>"
-        "Data Source</p>"
-        "<p style='font-size:13px;font-weight:600;color:#FFFFFF;margin:0;'>FactSet</p>"
+        "text-transform:uppercase;letter-spacing:0.10em;margin:0 0 8px 0;'>"
+        "Data Sources</p>"
+        # Primary source
+        "<div style='margin-bottom:6px;'>"
+        "<p style='font-size:12px;font-weight:600;color:#FFFFFF;margin:0 0 1px 0;'>"
+        "<span style='color:#3B82F6 !important;font-size:10px;font-weight:700;"
+        "letter-spacing:0.04em;'>PRIMARY</span></p>"
+        "<p style='font-size:12.5px;font-weight:600;color:#FFFFFF;margin:0 0 1px 0;'>"
+        "FactSet</p>"
+        "<p style='font-size:10.5px;color:#94A3B8;margin:0;'>"
+        "Fundamentals, estimates, prices</p>"
+        "</div>"
+        # Supplementary source
+        "<div style='border-top:1px solid #2D3748;padding-top:6px;'>"
+        "<p style='font-size:12px;font-weight:600;color:#FFFFFF;margin:0 0 1px 0;'>"
+        "<span style='color:#10B981 !important;font-size:10px;font-weight:700;"
+        "letter-spacing:0.04em;'>SUPPLEMENTARY</span></p>"
+        "<p style='font-size:12.5px;font-weight:600;color:#FFFFFF;margin:0 0 1px 0;'>"
+        "Yahoo Finance</p>"
+        "<p style='font-size:10.5px;color:#94A3B8;margin:0;'>"
+        "News, earnings, price history</p>"
+        "</div>"
         "</div>",
         unsafe_allow_html=True,
     )

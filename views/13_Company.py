@@ -168,8 +168,21 @@ g2.metric("NTM Rev Growth", _fmt_pct(snapshot.get("ntm_revenue_growth")))
 g3.metric("EBITDA Margin",  _fmt_pct(snapshot.get("ebitda_margin")))
 
 
-# ── Price chart (1Y, fetched live) ────────────────────────────────────────────
-st.markdown("#### Share Price (1Y)")
+# ── Price chart with time period selector ────────────────────────────────────
+st.markdown("#### Share Price")
+
+_period_options = {"1W": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd", "1Y": "1y", "3Y": "3y", "5Y": "5y"}
+_price_cols = st.columns(len(_period_options))
+_selected_period = st.session_state.get("_cp_period", "1Y")
+for i, (label, _) in enumerate(_period_options.items()):
+    if _price_cols[i].button(label, key=f"cp_btn_{label}",
+                              use_container_width=True,
+                              type="primary" if label == _selected_period else "secondary"):
+        st.session_state["_cp_period"] = label
+        _selected_period = label
+        st.rerun()
+
+_yf_period = _period_options[_selected_period]
 
 
 @st.cache_data(ttl=60 * 30)  # 30-min cache
@@ -181,7 +194,7 @@ def _fetch_price_history(yt: str, period: str = "1y") -> pd.DataFrame:
         return pd.DataFrame()
 
 
-hist = _fetch_price_history(yahoo_ticker)
+hist = _fetch_price_history(yahoo_ticker, _yf_period)
 if hist.empty:
     st.info("Price history not available for this ticker right now.")
 else:
@@ -319,13 +332,161 @@ st.caption(
 )
 
 
-# ── Fundamentals card ─────────────────────────────────────────────────────────
-st.markdown("#### Fundamentals (LTM)")
-f1, f2, f3, f4 = st.columns(4)
-f1.metric("LTM Revenue", _fmt_dollars_b(snapshot.get("ltm_revenue")))
-f2.metric("LTM Gross Profit", _fmt_dollars_b(snapshot.get("ltm_gross_profit")))
-f3.metric("LTM EBITDA", _fmt_dollars_b(snapshot.get("ltm_ebitda")))
-f4.metric("Gross Margin", _fmt_pct(snapshot.get("gross_margin")))
+# ── Income Statement Summary ──────────────────────────────────────────────────
+st.markdown("#### Income Statement Summary")
+
+_is_rows = [
+    ("Revenue (LTM)", snapshot.get("ltm_revenue")),
+    ("Gross Profit (LTM)", snapshot.get("ltm_gross_profit")),
+    ("EBITDA (LTM)", snapshot.get("ltm_ebitda")),
+    ("Revenue (NTM Est.)", snapshot.get("ntm_revenue")),
+    ("EBITDA (NTM Est.)", snapshot.get("ntm_ebitda")),
+]
+_is_html_rows = ""
+for _is_label, _is_val in _is_rows:
+    _is_html_rows += (
+        f'<tr>'
+        f'<td style="padding:8px 14px;border-bottom:1px solid #F3F4F6;color:#374151;">'
+        f'{_is_label}</td>'
+        f'<td style="padding:8px 14px;border-bottom:1px solid #F3F4F6;text-align:right;'
+        f'font-variant-numeric:tabular-nums;font-weight:600;color:#111827;">'
+        f'{_fmt_dollars_b(_is_val)}</td>'
+        f'</tr>'
+    )
+
+_margin_rows = [
+    ("Gross Margin", snapshot.get("gross_margin")),
+    ("EBITDA Margin", snapshot.get("ebitda_margin")),
+    ("NTM Revenue Growth", snapshot.get("ntm_revenue_growth")),
+    ("3Y Revenue CAGR", snapshot.get("n3y_revenue_cagr")),
+]
+for _m_label, _m_val in _margin_rows:
+    _m_display = _fmt_pct(_m_val)
+    _m_color = "#111827"
+    if _m_val is not None:
+        if "Growth" in _m_label or "CAGR" in _m_label:
+            _m_color = "#16A34A" if _m_val > 0 else "#DC2626"
+    _is_html_rows += (
+        f'<tr>'
+        f'<td style="padding:8px 14px;border-bottom:1px solid #F3F4F6;color:#374151;">'
+        f'{_m_label}</td>'
+        f'<td style="padding:8px 14px;border-bottom:1px solid #F3F4F6;text-align:right;'
+        f'font-weight:600;color:{_m_color};">{_m_display}</td>'
+        f'</tr>'
+    )
+
+st.markdown(
+    f'<div style="border:1px solid rgba(0,0,0,0.06);border-radius:10px;overflow:hidden;'
+    f'background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,0.03);margin-bottom:8px;">'
+    f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    f'<thead><tr style="background:#F9FAFB;">'
+    f'<th style="text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;'
+    f'letter-spacing:0.05em;color:#6B7280;border-bottom:1px solid #E5E7EB;">Metric</th>'
+    f'<th style="text-align:right;padding:10px 14px;font-size:11px;text-transform:uppercase;'
+    f'letter-spacing:0.05em;color:#6B7280;border-bottom:1px solid #E5E7EB;">Value</th>'
+    f'</tr></thead>'
+    f'<tbody>{_is_html_rows}</tbody>'
+    f'</table></div>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<div style="font-size:10px;color:#9CA3AF;margin-bottom:16px;">'
+    '<span style="color:#64748B;font-weight:500;">Source:</span> FactSet (fundamentals &amp; estimates)</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── Broker Price Targets ─────────────────────────────────────────────────────
+st.markdown("#### Analyst Price Targets")
+
+@st.cache_data(ttl=60 * 60)
+def _fetch_analyst_data(yt: str):
+    try:
+        t = yf.Ticker(yt)
+        info = t.info or {}
+        return {
+            "target_low": info.get("targetLowPrice"),
+            "target_mean": info.get("targetMeanPrice"),
+            "target_median": info.get("targetMedianPrice"),
+            "target_high": info.get("targetHighPrice"),
+            "current": info.get("currentPrice") or info.get("regularMarketPrice"),
+            "recommendation": info.get("recommendationKey"),
+            "num_analysts": info.get("numberOfAnalystOpinions"),
+        }
+    except Exception:
+        return {}
+
+_analyst = _fetch_analyst_data(yahoo_ticker)
+if _analyst and _analyst.get("target_mean"):
+    _cur = _analyst.get("current") or snapshot.get("current_price")
+    _low = _analyst.get("target_low")
+    _mean = _analyst.get("target_mean")
+    _med = _analyst.get("target_median")
+    _high = _analyst.get("target_high")
+    _n = _analyst.get("num_analysts")
+    _rec = (_analyst.get("recommendation") or "").replace("_", " ").title()
+
+    if _cur and _med:
+        _upside = ((_med / _cur) - 1) * 100
+        _upside_color = "#16A34A" if _upside >= 0 else "#DC2626"
+        _upside_html = (
+            f'<span style="font-size:20px;font-weight:700;color:{_upside_color};">'
+            f'{"+" if _upside >= 0 else ""}{_upside:.1f}%</span>'
+            f'<span style="font-size:12px;color:#6B7280;margin-left:6px;">to median target</span>'
+        )
+    else:
+        _upside_html = ""
+
+    # Visual range bar
+    if _cur and _low and _high and _high > _low:
+        _range = _high - _low
+        _cur_pct = max(0, min(100, ((_cur - _low) / _range) * 100))
+        _med_pct = max(0, min(100, ((_med - _low) / _range) * 100)) if _med else 50
+        _range_bar = (
+            f'<div style="position:relative;height:8px;background:linear-gradient(90deg, #FEE2E2 0%, #FEF3C7 50%, #DCFCE7 100%);'
+            f'border-radius:4px;margin:16px 0 8px 0;">'
+            f'<div style="position:absolute;top:-4px;left:{_cur_pct:.0f}%;transform:translateX(-50%);'
+            f'width:16px;height:16px;background:#1D4ED8;border-radius:50%;border:2px solid white;'
+            f'box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>'
+            f'<div style="position:absolute;top:-3px;left:{_med_pct:.0f}%;transform:translateX(-50%);'
+            f'width:2px;height:14px;background:#6B7280;"></div>'
+            f'</div>'
+            f'<div style="display:flex;justify-content:space-between;font-size:11px;color:#6B7280;">'
+            f'<span>Low: ${_low:.0f}</span>'
+            f'<span>Median: ${_med:.0f}</span>'
+            f'<span>High: ${_high:.0f}</span>'
+            f'</div>'
+        )
+    else:
+        _range_bar = ""
+
+    st.markdown(
+        f'<div style="background:#FFFFFF;border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
+        f'padding:20px;box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'margin-bottom:12px;">'
+        f'<div>'
+        f'<span style="font-size:14px;color:#374151;font-weight:500;">Current: </span>'
+        f'<span style="font-size:20px;font-weight:700;color:#111827;">'
+        f'${_cur:.2f}</span>'
+        f'</div>'
+        f'<div>{_upside_html}</div>'
+        f'</div>'
+        f'{_range_bar}'
+        f'<div style="display:flex;gap:24px;margin-top:12px;font-size:12px;color:#6B7280;">'
+        f'{"<span>Consensus: <b>" + _rec + "</b></span>" if _rec else ""}'
+        f'{"<span>Analysts: <b>" + str(_n) + "</b></span>" if _n else ""}'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#9CA3AF;margin-top:4px;margin-bottom:16px;">'
+        '<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (analyst consensus)</div>',
+        unsafe_allow_html=True,
+    )
+else:
+    st.caption("Analyst price target data not available for this ticker.")
 
 
 # ── News (yfinance, fetched live) ─────────────────────────────────────────────
@@ -386,8 +547,13 @@ else:
         )
 
 
-# ── Footer link back to comp table ────────────────────────────────────────────
+# ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
-st.caption(
-    f'Data via yfinance · LTM/NTM via fetcher snapshot {snapshot.get("snapshot_date","")}'
+st.markdown(
+    f'<div style="font-size:10px;color:#9CA3AF;">'
+    f'<span style="color:#64748B;font-weight:500;">Sources:</span> '
+    f'FactSet (fundamentals, estimates, multiples) · Yahoo Finance (share prices, news, analyst targets) · '
+    f'Snapshot date: {snapshot.get("snapshot_date","")}'
+    f'</div>',
+    unsafe_allow_html=True,
 )

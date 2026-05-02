@@ -293,20 +293,18 @@ pg = st.navigation({
         st.Page("views/02_Valuation_Lookback.py",     title="Valuation Lookback",      icon=":material/history:"),
         st.Page("views/03_Valuation_Regression.py",   title="Valuation Regression",    icon=":material/analytics:"),
     ],
-    "Segment Comps": [
-        st.Page("views/04_Pharma.py",          title="Pharma",                              icon=":material/medication:"),
-        st.Page("views/05_Consumer_Health.py", title="Consumer Health",                     icon=":material/storefront:"),
-        st.Page("views/06_MedTech.py",         title="MedTech",                             icon=":material/medical_services:"),
-        st.Page("views/07_Life_Sci_Tools.py",  title="Life Sci Tools / Dx / Bioprocessing", icon=":material/biotech:"),
-        st.Page("views/08_Services.py",        title="Asset-Light Services",                icon=":material/handshake:"),
-        st.Page("views/09_CDMOs.py",           title="CDMOs",                               icon=":material/factory:"),
-        st.Page("views/10_Health_Tech.py",     title="Health Tech",                         icon=":material/devices:"),
+    "Comps": [
+        st.Page("views/04_Comps_Table.py",     title="Comps Table",             icon=":material/table_chart:"),
+        st.Page("views/13_Company.py",         title="Company Profile",         icon=":material/account_circle:"),
     ],
-    "Explore": [
+    "Analysis": [
         st.Page("views/11_Scenario_Screener.py",     title="Scenario Screener",     icon=":material/filter_alt:"),
         st.Page("views/12_Comp_Set_Builder.py",      title="Comp Set Builder",      icon=":material/group_work:"),
-        st.Page("views/13_Company.py",               title="Company",               icon=":material/account_circle:"),
+        st.Page("views/15_Broker_Consensus.py",      title="Broker Consensus",      icon=":material/price_check:"),
+    ],
+    "News": [
         st.Page("views/14_News.py",                  title="News & Earnings",       icon=":material/newspaper:"),
+        st.Page("views/16_MA_Activity.py",            title="M&A Activity",          icon=":material/handshake:"),
     ],
 })
 

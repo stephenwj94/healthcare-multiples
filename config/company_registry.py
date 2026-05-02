@@ -202,7 +202,7 @@ COMPANY_REGISTRY = [
     {"ticker": 'LIVN', "yahoo_ticker": 'LIVN', "name": 'LivaNova', "segment": 'medtech', "sub_segment": 'med_device_large_cap', "fy_end_month": 12, "country": 'UK'},
     {"ticker": 'IART', "yahoo_ticker": 'IART', "name": 'Integra LifeSciences', "segment": 'medtech', "sub_segment": 'med_device_large_cap', "fy_end_month": 12, "country": 'US'},
     {"ticker": 'GEHC', "yahoo_ticker": 'GEHC', "name": 'GE HealthCare Technologies', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'US'},
-    {"ticker": 'SHL', "yahoo_ticker": 'SHL.DE', "name": 'Siemens Healthineers', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'Germany', "reporting_currency": 'EUR'},
+    {"ticker": 'SHLDE', "yahoo_ticker": 'SHL.DE', "name": 'Siemens Healthineers', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'Germany', "reporting_currency": 'EUR'},
     {"ticker": 'PHIA', "yahoo_ticker": 'PHIA.AS', "name": 'Koninklijke Philips', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'Netherlands', "reporting_currency": 'EUR'},
     {"ticker": '7751', "yahoo_ticker": '7751.T', "name": 'Canon (Medical)', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'Japan', "reporting_currency": 'JPY'},
     {"ticker": '4901', "yahoo_ticker": '4901.T', "name": 'Fujifilm Holdings', "segment": 'medtech', "sub_segment": 'imaging', "fy_end_month": 12, "country": 'Japan', "reporting_currency": 'JPY'},
@@ -263,7 +263,6 @@ COMPANY_REGISTRY = [
     {"ticker": 'ERF', "yahoo_ticker": 'ERF.PA', "name": 'Eurofins Scientific', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'Luxembourg', "reporting_currency": 'EUR'},
     {"ticker": 'SXS', "yahoo_ticker": 'SXS.L', "name": 'Spectris', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'UK', "reporting_currency": 'GBP'},
     {"ticker": 'HLMA', "yahoo_ticker": 'HLMA.L', "name": 'Halma', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'UK', "reporting_currency": 'GBP'},
-    {"ticker": 'BANB', "yahoo_ticker": 'BANB.SW', "name": 'Bachem Holding', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'Switzerland', "reporting_currency": 'CHF'},
     {"ticker": 'ADPT', "yahoo_ticker": 'ADPT', "name": 'Adaptive Biotechnologies', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'US'},
     {"ticker": 'CTKB', "yahoo_ticker": 'CTKB', "name": 'Cytek Biosciences', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'US'},
     {"ticker": 'CDXS', "yahoo_ticker": 'CDXS', "name": 'Codexis', "segment": 'life_sci_tools', "sub_segment": 'life_science_tools', "fy_end_month": 12, "country": 'US'},
@@ -313,7 +312,6 @@ COMPANY_REGISTRY = [
     {"ticker": 'CAH', "yahoo_ticker": 'CAH', "name": 'Cardinal Health', "segment": 'services', "sub_segment": 'patient_access_hubs', "fy_end_month": 12, "country": 'US'},
     {"ticker": 'MCK', "yahoo_ticker": 'MCK', "name": 'McKesson', "segment": 'services', "sub_segment": 'patient_access_hubs', "fy_end_month": 12, "country": 'US'},
     {"ticker": 'COR', "yahoo_ticker": 'COR', "name": 'Cencora (AmerisourceBergen)', "segment": 'services', "sub_segment": 'patient_access_hubs', "fy_end_month": 12, "country": 'US'},
-    {"ticker": 'PHR', "yahoo_ticker": 'PHR', "name": 'Phreesia', "segment": 'services', "sub_segment": 'patient_access_hubs', "fy_end_month": 12, "country": 'US'},
 
     # =========================================================================
     # CDMOs (Asset-Heavy Services)  (13 companies)

@@ -176,29 +176,41 @@ def calc_n3y_cagr(five_year_growth_rate, current_fy_rev, next_fy_rev):
 
 def calc_price_changes(price_history):
     """
-    Compute 2-week and 2-month price changes from a price history DataFrame.
+    Compute 2-week and 2-month price changes from a price history.
+    Accepts either a pandas DataFrame (yfinance) with "Close" column
+    or a list of {date, price} dicts (FactSet).
     Returns (change_2w, change_2m) as decimals.
     """
-    if price_history is None or len(price_history) < 2:
+    if price_history is None:
         return None, None
 
-    closes = price_history["Close"]
-    if hasattr(closes, "iloc"):
-        latest = closes.iloc[-1]
+    # Extract a list of closing prices from either format.
+    closes = None
+    if isinstance(price_history, list):
+        # FactSet format: list of {date, price} dicts
+        closes = [row["price"] for row in price_history if row.get("price") is not None]
+    elif hasattr(price_history, "__len__") and len(price_history) >= 2:
+        # pandas DataFrame from yfinance
+        col = price_history.get("Close") if hasattr(price_history, "get") else None
+        if col is not None and hasattr(col, "iloc"):
+            closes = list(col)
 
-        # 2-week ~ 10 trading days
-        idx_2w = min(10, len(closes) - 1)
-        price_2w_ago = closes.iloc[-(idx_2w + 1)]
-        change_2w = (latest / price_2w_ago) - 1.0 if price_2w_ago > 0 else None
+    if not closes or len(closes) < 2:
+        return None, None
 
-        # 2-month ~ 42 trading days
-        idx_2m = min(42, len(closes) - 1)
-        price_2m_ago = closes.iloc[-(idx_2m + 1)]
-        change_2m = (latest / price_2m_ago) - 1.0 if price_2m_ago > 0 else None
+    latest = closes[-1]
 
-        return change_2w, change_2m
+    # 2-week ~ 10 trading days
+    idx_2w = min(10, len(closes) - 1)
+    price_2w_ago = closes[-(idx_2w + 1)]
+    change_2w = (latest / price_2w_ago) - 1.0 if price_2w_ago > 0 else None
 
-    return None, None
+    # 2-month ~ 42 trading days
+    idx_2m = min(42, len(closes) - 1)
+    price_2m_ago = closes[-(idx_2m + 1)]
+    change_2m = (latest / price_2m_ago) - 1.0 if price_2m_ago > 0 else None
+
+    return change_2w, change_2m
 
 
 def _convert_financials_to_usd(metrics_dict, financial_currency, trading_currency):
@@ -362,21 +374,36 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metric
                 return v
         return None
 
-    # Raw values — FactSet doesn't return market data (prices/shares were fundamentals-only),
-    # so market cap / price come from FMP/yfinance. FactSet does provide diluted share count.
-    market_cap = prefer(fmp.get("market_cap"), info.get("marketCap"))
+    # Raw values — FactSet is primary source for everything including market data.
+    #
+    # Period-end FF_MKT_VAL / FF_ENTRPR_VAL from FactSet fundamentals are in the
+    # financial reporting currency.  For ADRs (price in USD, financials in DKK/EUR/etc.)
+    # the FX conversion path treats market items as being in trading_currency, so
+    # these period-end values would NOT be converted.  Only use them when the
+    # financial and price currencies match; otherwise fall through to FMP/yfinance
+    # or the live computation (price × shares) which runs after FX conversion.
+    fs_currencies_match = (
+        not fs.get("price_currency")
+        or not fs.get("currency")
+        or fs.get("price_currency") == fs.get("currency")
+    )
+    fs_mkt = fs.get("market_cap") if fs_currencies_match else None
+    fs_ev = fs.get("enterprise_value") if fs_currencies_match else None
+
+    market_cap = prefer(fs_mkt, fmp.get("market_cap"), info.get("marketCap"))
     current_price = prefer(
+        fs.get("current_price"),
         fmp.get("current_price"),
         info.get("currentPrice") or info.get("regularMarketPrice"),
     )
-    high_52wk = prefer(fmp.get("fifty_two_week_high"), info.get("fiftyTwoWeekHigh"))
+    high_52wk = prefer(fs.get("fifty_two_week_high"), fmp.get("fifty_two_week_high"), info.get("fiftyTwoWeekHigh"))
     total_debt = prefer(fs.get("total_debt"), fmp.get("total_debt"), info.get("totalDebt"))
     total_cash = prefer(fs.get("total_cash"), fmp.get("total_cash"), info.get("totalCash"))
     shares = prefer(fs.get("shares_outstanding"), fmp.get("shares_outstanding"), info.get("sharesOutstanding"))
     currency = fs.get("currency") or fmp.get("currency") or info.get("currency", "USD")
 
-    # EV: FactSet doesn't return EV directly; prefer FMP key-metrics-ttm > yfinance > calculate.
-    ev = prefer(fmp.get("enterprise_value"), info.get("enterpriseValue"))
+    # EV: prefer live computation (happens after FX below); fall back to period-end.
+    ev = prefer(fs_ev, fmp.get("enterprise_value"), info.get("enterpriseValue"))
     if not ev and market_cap:
         ev = calc_tev(market_cap, total_debt, total_cash)
 
@@ -401,10 +428,10 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metric
     next_fy_ebitda_est = prefer(fs.get("next_fy_ebitda_est"), fmp.get("next_fy_ebitda_est"))
 
     # Track which sources contributed
-    fs_fields_used = sum(1 for k, v in fs.items() if v is not None and k not in {"data_source", "currency"})
+    fs_fields_used = sum(1 for k, v in fs.items() if v is not None and k not in {"data_source", "currency", "price_currency", "price_history"})
     fmp_fields_used = sum(1 for v in fmp.values() if v is not None)
     if fs_fields_used >= 3:
-        data_source = "factset+yfinance"
+        data_source = "factset"
     elif fmp_fields_used >= 3:
         data_source = "fmp+yfinance"
     else:
@@ -431,7 +458,7 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metric
         financial_currency = fs_currency
     else:
         financial_currency = detect_financial_currency(info, company_info)
-    trading_currency = info.get("currency") or fmp.get("currency") or "USD"
+    trading_currency = fs.get("price_currency") or info.get("currency") or fmp.get("currency") or "USD"
 
     if financial_currency != "USD" or trading_currency != "USD":
         raw_financials = {
@@ -466,6 +493,16 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metric
 
         # Recalculate EV if market cap was converted
         if trading_currency != "USD" and market_cap:
+            ev = calc_tev(market_cap, total_debt, total_cash)
+
+    # --- LIVE MARKET CAP & EV (after FX — all values now in USD) ---
+    # FactSet period-end FF_MKT_VAL / FF_ENTRPR_VAL may be stale or in the wrong
+    # currency for ADRs.  Compute live values from current_price × shares whenever
+    # both are available.  Debt/cash are already USD-converted above.
+    if current_price and shares:
+        live_mkt = current_price * shares
+        if live_mkt > 0:
+            market_cap = live_mkt
             ev = calc_tev(market_cap, total_debt, total_cash)
 
     # --- APPLY MANUAL OVERRIDES (after FX conversion — overrides are always in USD) ---
@@ -517,8 +554,9 @@ def compute_all_metrics(raw_data, company_info, fmp_metrics=None, factset_metric
     # N3Y CAGR
     n3y_cagr = calc_n3y_cagr(five_year_growth, current_fy_rev_est, next_fy_rev_est)
 
-    # Price Changes — yfinance history is most reliable for this
-    change_2w, change_2m = calc_price_changes(price_hist)
+    # Price Changes — prefer FactSet price history, fall back to yfinance
+    fs_price_hist = fs.get("price_history")
+    change_2w, change_2m = calc_price_changes(fs_price_hist or price_hist)
 
     result = {
         "name": company_info["name"],

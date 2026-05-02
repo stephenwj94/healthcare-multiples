@@ -99,8 +99,9 @@ def run_fetch(tickers=None):
         try:
             logger.info(f"[{i}/{total}] Fetching {ticker} ({yahoo_ticker})...")
 
-            # Step 1: FactSet data (highest priority — fundamentals + estimates)
+            # Step 1: FactSet data (primary source — fundamentals + estimates + prices)
             factset_metrics = None
+            factset_complete = False
             if factset_available:
                 try:
                     fs_id = company.get("factset_id") or display_to_factset(ticker)
@@ -113,21 +114,22 @@ def run_fetch(tickers=None):
                     factset_metrics = parse_factset_data(fs_raw, company)
                     fs_fields = sum(
                         1 for k, v in factset_metrics.items()
-                        if v is not None and k not in {"data_source", "currency"}
+                        if v is not None and k not in {"data_source", "currency", "price_currency", "price_history"}
                     )
                     if fs_fields > 0:
                         factset_hit_count += 1
                         logger.info(f"  FactSet: {fs_fields} fields populated ({factset_metrics.get('currency')})")
+                    # Consider FactSet "complete" if it provided price + shares + revenue
+                    # (live market cap / EV are computed in calculators from price × shares)
+                    factset_complete = all(factset_metrics.get(k) for k in ("current_price", "shares_outstanding", "ltm_revenue"))
                 except Exception as e:
                     logger.warning(f"  FactSet failed for {ticker}: {e}")
                     factset_metrics = None
 
-            # Step 2: FMP data (fallback / market data)
+            # Step 2: FMP data (fallback — skip if FactSet provided everything)
             fmp_metrics = None
-            if fmp_available:
+            if fmp_available and not factset_complete:
                 try:
-                    # Use fmp_ticker if set, else yahoo_ticker (has exchange suffix
-                    # for international companies, avoiding wrong-company resolution)
                     fmp_ticker = company.get("fmp_ticker") or company.get("yahoo_ticker", ticker)
                     fmp_data = fetch_company_data_fmp(fmp_ticker, FMP_API_KEY)
                     fmp_metrics = parse_fmp_data(fmp_data, company)
@@ -139,8 +141,13 @@ def run_fetch(tickers=None):
                     logger.warning(f"  FMP failed for {ticker}: {e}")
                     fmp_metrics = None
 
-            # Step 3: yfinance data (always — provides prices, news, history)
-            raw_data = fetch_company_data(yahoo_ticker)
+            # Step 3: yfinance data (fallback — skip if FactSet provided prices)
+            if factset_complete:
+                # FactSet has everything; provide empty raw_data shell
+                raw_data = {"info": {}, "estimates": {}, "growth": {}, "price_history": None}
+                logger.info("  Skipping yfinance (FactSet complete)")
+            else:
+                raw_data = fetch_company_data(yahoo_ticker)
 
             # Step 4: Compute all metrics (FactSet > FMP > yfinance)
             metrics = compute_all_metrics(

@@ -45,17 +45,14 @@ _COLS_REVENUE = [
     ("Mkt\nCap",          "mkt_cap_m",      76, False, "right"),
     ("TEV",               "tev_m",          76, False, "right"),
     ("%\n52W Hi",         "pct_52wk",       76, False, "right"),
-    # NTM Multiples
+    # NTM Multiples (Rev → GP → EBITDA)
     ("NTM\nEV/Rev",       "ev_rev",         76, False, "right"),
-    ("NTM\nEV/EBITDA",    "ev_ebitda",      76, False, "right"),
     ("NTM\nEV/GP",        "ev_gp",          76, False, "right"),
-    # LTM Multiples
+    ("NTM\nEV/EBITDA",    "ev_ebitda",      76, False, "right"),
+    # LTM Multiples (Rev → GP → EBITDA)
     ("LTM\nEV/Rev",       "ltm_rev_x",      76, False, "right"),
-    ("LTM\nEV/EBITDA",    "ltm_ebitda_x",   76, False, "right"),
     ("LTM\nEV/GP",        "ltm_gp_x",       76, False, "right"),
-    # Growth-Adjusted Multiples
-    ("GA\nEV/Rev",        "ga_rev",         76, False, "right"),
-    ("GA\nEV/GP",         "ga_gp",          76, False, "right"),
+    ("LTM\nEV/EBITDA",    "ltm_ebitda_x",   76, False, "right"),
     # Growth & Margins
     ("NTM Rev\nGr%",      "rev_gr",          76, False, "right"),
     ("3Y\nCAGR",          "cagr_3y",         76, False, "right"),
@@ -71,15 +68,14 @@ _GROUPS_REVENUE = [
     ("Market Data",        3, "#1E293B",     "#FFFFFF",     "transparent"),
     ("NTM Multiples",      3, "#1E293B",     "#FFFFFF",     "transparent"),
     ("LTM Multiples",      3, "#1E293B",     "#FFFFFF",     "transparent"),
-    ("Growth-Adjusted",    2, "#1E293B",     "#FFFFFF",     "transparent"),
     ("Growth & Margins",   4, "#1E293B",     "#FFFFFF",     "transparent"),
     ("Price Performance",  2, "#1E293B",     "#FFFFFF",     "transparent"),
 ]
 
 # Col indices where a group-divider left-border is applied
-# 0:Company 1:Ticker | 2:MktCap 3:TEV 4:52WH | 5:NTM EV/Rev ..7 | 8:LTM EV/Rev ..10
-# 11:GA EV/Rev 12:GA EV/GP | 13:NTM Rev Gr% 14:3Y CAGR 15:GM 16:EBITDA Mgn | 17:2W Chg 18:2M Chg
-_GROUP_STARTS_REVENUE = {2, 5, 8, 11, 13, 17}
+# 0:Company 1:Ticker | 2:MktCap 3:TEV 4:52WH | 5:NTM EV/Rev 6:EV/GP 7:EV/EBITDA
+# 8:LTM EV/Rev 9:EV/GP 10:EV/EBITDA | 11:NTM Rev Gr% 12:3Y CAGR 13:GM 14:EBITDA Mgn | 15:2W Chg 16:2M Chg
+_GROUP_STARTS_REVENUE = {2, 5, 8, 11, 15}
 
 # EBITDA view — NTM + LTM EV/EBITDA only (20 columns)
 # Same two-line label convention; uniform 76px non-sticky columns.
@@ -92,9 +88,6 @@ _COLS_EBITDA = [
     # EBITDA multiples only
     ("NTM\nEV/EBITDA",    "ev_ebitda",      76, False, "right"),
     ("LTM\nEV/EBITDA",    "ltm_ebitda_x",   76, False, "right"),
-    # Growth-Adjusted Multiples
-    ("GA\nEV/Rev",        "ga_rev",         76, False, "right"),
-    ("GA\nEV/GP",         "ga_gp",          76, False, "right"),
     # Growth & Margins
     ("NTM Rev\nGr%",      "rev_gr",          76, False, "right"),
     ("3Y\nCAGR",          "cagr_3y",         76, False, "right"),
@@ -110,14 +103,13 @@ _GROUPS_EBITDA = [
     ("Market Data",        3, "#1E293B",     "#FFFFFF",     "transparent"),
     ("NTM Multiples",      1, "#1E293B",     "#FFFFFF",     "transparent"),
     ("LTM Multiples",      1, "#1E293B",     "#FFFFFF",     "transparent"),
-    ("Growth-Adjusted",    2, "#1E293B",     "#FFFFFF",     "transparent"),
     ("Growth & Margins",   4, "#1E293B",     "#FFFFFF",     "transparent"),
     ("Price Performance",  2, "#1E293B",     "#FFFFFF",     "transparent"),
 ]
 
 # 0:Company 1:Ticker | 2:MktCap 3:TEV 4:52WH | 5:NTM EV/EBITDA | 6:LTM EV/EBITDA
-# 7:GA EV/Rev 8:GA EV/GP | 9:NTM Rev Gr% 10:3Y CAGR 11:GM 12:EBITDA Mgn | 13:2W Chg 14:2M Chg
-_GROUP_STARTS_EBITDA = {2, 5, 6, 7, 9, 13}
+# 7:NTM Rev Gr% 8:3Y CAGR 9:GM 10:EBITDA Mgn | 11:2W Chg 12:2M Chg
+_GROUP_STARTS_EBITDA = {2, 5, 6, 7, 11}
 
 # ── View config dicts ─────────────────────────────────────────────────────────
 _CFG_REVENUE = {
@@ -798,13 +790,11 @@ _EXCEL_COLUMNS = [
     ("TEV ($mm)",        "tev_m",         14, '#,##0;(#,##0)'),
     ("% 52W Hi",         "pct_52wk",      10, '0%;(0%)'),
     ("NTM EV/Rev",       "ev_rev",        11, '0.0"x";(0.0"x")'),
-    ("NTM EV/EBITDA",    "ev_ebitda",     13, '0.0"x";(0.0"x")'),
     ("NTM EV/GP",        "ev_gp",         11, '0.0"x";(0.0"x")'),
+    ("NTM EV/EBITDA",    "ev_ebitda",     13, '0.0"x";(0.0"x")'),
     ("LTM EV/Rev",       "ltm_rev_x",     11, '0.0"x";(0.0"x")'),
-    ("LTM EV/EBITDA",    "ltm_ebitda_x",  13, '0.0"x";(0.0"x")'),
     ("LTM EV/GP",        "ltm_gp_x",      11, '0.0"x";(0.0"x")'),
-    ("GA EV/Rev",        "ga_rev",        10, '0.00"x";(0.00"x")'),
-    ("GA EV/GP",         "ga_gp",         10, '0.00"x";(0.00"x")'),
+    ("LTM EV/EBITDA",    "ltm_ebitda_x",  13, '0.0"x";(0.0"x")'),
     ("NTM Rev Gr%",      "rev_gr",        12, '0.0%;(0.0%)'),
     ("3Y CAGR",          "cagr_3y",       10, '0.0%;(0.0%)'),
     ("Gross Mgn",        "gm",            10, '0%;(0%)'),

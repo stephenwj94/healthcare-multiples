@@ -87,9 +87,8 @@ _INTERNATIONAL_OVERRIDES = {
     # MedTech — UK
     "CTEC":        "CTEC-GB",      # Convatec Group
     # MedTech — Germany
-    "SHL":         "SHL-DE",       # Siemens Healthineers (NOTE: SHL ticker
-                                   # also used by Sonic Healthcare in AU; the
-                                   # life_sci_tools entry is overridden below.)
+    "SHLDE":       "SHL-DE",       # Siemens Healthineers (internal ticker SHLDE to avoid
+                                   # collision with Sonic Healthcare SHL-AU)
     "AFX":         "AFX-DE",       # Carl Zeiss Meditec
     # MedTech — Netherlands
     "PHIA":        "PHIA-NL",      # Koninklijke Philips
@@ -113,8 +112,7 @@ _INTERNATIONAL_OVERRIDES = {
     # Life Sci Tools — Italy
     "DIA":         "DIA-IT",       # Diasorin
     # Life Sci Tools — Australia (Sonic, Healius)
-    # Note: Sonic Healthcare uses SHL ticker but listed in AU; can't disambiguate
-    # in a flat dict from MedTech Siemens Healthineers. Best-effort: leave HLS only.
+    "SHL":         "SHL-AU",       # Sonic Healthcare
     "HLS":         "HLS-AU",       # Healius
     # Life Sci Tools — China (Shenzhen)
     "300760":      "300760-CN",    # Mindray Bio-Medical

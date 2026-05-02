@@ -1043,7 +1043,7 @@ def _render_combined_html(period_returns, period_avail, index_returns=None, sw_r
 
     return (
         f'{hover_css}'
-        f'<div style="max-height:85vh;overflow-y:auto;overflow-x:auto;'
+        f'<div style="overflow-x:auto;'
         f'border-radius:12px;border:1px solid #E5E7EB;'
         f'box-shadow:0 1px 3px rgba(0,0,0,0.04);position:relative;">'
         f'<table class="movers-table" style="width:100%;'
@@ -1062,7 +1062,7 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
     # Build rebased series for each benchmark
     series_map = {}
 
-    # 1. Permira Healthcare Universe — average of all company prices, rebased
+    # 1. Healthcare Universe — average of all company prices, rebased
     if not close_df.empty:
         hc_daily = close_df[(close_df.index >= start_12m) & (close_df.index <= as_of)]
         if not hc_daily.empty:
@@ -1072,7 +1072,7 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
             normed = hc_daily.div(first_valid) * 100
             hc_avg = normed.mean(axis=1).dropna()
             if not hc_avg.empty:
-                series_map["Permira Healthcare Universe"] = hc_avg
+                series_map["Healthcare Universe"] = hc_avg
 
     # 2. S&P 500, NASDAQ
     for name, display in [("S&P 500", "S&P 500"), ("NASDAQ", "NASDAQ")]:
@@ -1089,28 +1089,28 @@ def _render_benchmark_chart(index_prices, close_df, as_of):
 
     # Colors for each line
     colors = {
-        "Permira Healthcare Universe": "#F59E0B",  # orange
+        "Healthcare Universe": "#F59E0B",  # orange
         "S&P 500": "#6B7280",                     # gray
         "NASDAQ": "#8B5CF6",                       # purple
     }
 
     fig = go.Figure()
 
-    # Add line traces — S&P/NASDAQ as subtle thin lines, Permira bold
+    # Add line traces — S&P/NASDAQ as subtle thin lines, HC Universe bold
     hover_names = {
-        "Permira Healthcare Universe": "HC Index",
+        "Healthcare Universe": "HC Index",
     }
     for name, s in series_map.items():
-        is_permira = name == "Permira Healthcare Universe"
+        is_hc = name == "Healthcare Universe"
         fig.add_trace(go.Scatter(
             x=s.index, y=s.values,
             name=name,
             mode="lines",
             line=dict(
                 color=colors.get(name, "#94A3B8"),
-                width=3 if is_permira else 1.5,
+                width=3 if is_hc else 1.5,
             ),
-            opacity=1.0 if is_permira else 0.5,
+            opacity=1.0 if is_hc else 0.5,
             hovertemplate=f"<b>{hover_names.get(name, name)}</b>: %{{y:.1f}}<extra></extra>",
         ))
 
@@ -1252,7 +1252,7 @@ def render_multi_period_view(data):
     )
     st.markdown(
         f'<div style="font-size:9px;color:#B0B7C3;margin-top:10px;padding-left:4px;">'
-        f'Yahoo Finance · As of {as_of.strftime("%b %d, %Y")} · '
+        f'<span style="color:#64748B;font-weight:500;">Source:</span> Yahoo Finance (share prices) · FactSet (fundamentals) · As of {as_of.strftime("%b %d, %Y")} · '
         f'HC Index = simple avg return across healthcare universe'
         f'{unavail_note}</div>',
         unsafe_allow_html=True,
@@ -1285,7 +1285,9 @@ def _render_stat_cards(data, change_col):
     best_d       = winners_raw[0] if winners_raw else {}
     worst_d      = losers_raw[0] if losers_raw else {}
     best_ticker  = best_d.get("ticker", "?")
+    best_name    = best_d.get("name", best_ticker)
     worst_ticker = worst_d.get("ticker", "?")
+    worst_name   = worst_d.get("name", worst_ticker)
 
     sentiment_label = "Bullish" if median_chg >= 0 else "Bearish"
 
@@ -1297,9 +1299,7 @@ def _render_stat_cards(data, change_col):
     advdec_gauge = (
         f'<div style="display:flex;align-items:center;gap:18px;margin-top:2px;">'
         f'<svg width="110" height="110" viewBox="0 0 110 110">'
-        # Red track (full circle behind)
         f'<circle cx="55" cy="55" r="{r}" fill="none" stroke="{RED}" stroke-width="10" opacity="0.25"/>'
-        # Green arc for advancing portion
         f'<circle cx="55" cy="55" r="{r}" fill="none" stroke="{GREEN}" stroke-width="10"'
         f' stroke-dasharray="{green_arc:.1f} {red_arc:.1f}"'
         f' stroke-dashoffset="0" stroke-linecap="round"'
@@ -1324,62 +1324,77 @@ def _render_stat_cards(data, change_col):
         f'{sentiment_label}</span>'
     )
 
+    median_color = GREEN if median_chg >= 0 else RED
     median_fmt = (
-        f"+{median_chg:.1f}%" if median_chg >= 0 else f"({abs(median_chg):.1f}%)"
+        f'<span style="color:{median_color};">'
+        + (f"+{median_chg:.1f}%" if median_chg >= 0 else f"-{abs(median_chg):.1f}%")
+        + '</span>'
     )
 
-    # Best performer card content
+    # Best performer card content — show company name
     best_logo = logo_img_tag(best_ticker, size=20)
     best_logo_html = f'{best_logo}&nbsp;' if best_logo else ''
     best_pct = max_gain
+    best_short = (best_name[:24] + "...") if len(best_name) > 27 else best_name
     best_val_html = (
         f'<div style="display:flex;align-items:center;gap:8px;justify-content:start;">'
         f'{best_logo_html}'
         f'<span style="font-size:28px;font-weight:800;color:{GREEN};">'
         f'+{best_pct:.1f}%</span>'
         f'</div>'
-        f'<div style="font-size:15px;font-weight:700;color:#111827;margin-top:4px;">'
-        f'{best_ticker}</div>'
+        f'<div style="font-size:14px;font-weight:700;color:#111827;margin-top:4px;">'
+        f'{_html_lib.escape(best_short)}</div>'
+        f'<div style="font-size:11px;color:#6B7280;margin-top:1px;">{best_ticker}</div>'
     )
 
-    # Worst performer card content
+    # Worst performer card content — show company name
     worst_logo = logo_img_tag(worst_ticker, size=20)
     worst_logo_html = f'{worst_logo}&nbsp;' if worst_logo else ''
     worst_pct = abs(max_loss)
+    worst_short = (worst_name[:24] + "...") if len(worst_name) > 27 else worst_name
     worst_val_html = (
         f'<div style="display:flex;align-items:center;gap:8px;justify-content:start;">'
         f'{worst_logo_html}'
         f'<span style="font-size:28px;font-weight:800;color:{RED};">'
-        f'({worst_pct:.1f}%)</span>'
+        f'-{worst_pct:.1f}%</span>'
         f'</div>'
-        f'<div style="font-size:15px;font-weight:700;color:#111827;margin-top:4px;">'
-        f'{worst_ticker}</div>'
+        f'<div style="font-size:14px;font-weight:700;color:#111827;margin-top:4px;">'
+        f'{_html_lib.escape(worst_short)}</div>'
+        f'<div style="font-size:11px;color:#6B7280;margin-top:1px;">{worst_ticker}</div>'
     )
-
-    # Compute YTD median from 2-week price changes + stored data
-    # Use price_change_2w as proxy period label
-    ytd_changes = []
-    for d in valid:
-        # Try to compute YTD from current price vs start-of-year
-        cp = d.get("current_price")
-        # We don't have YTD stored, so show spread instead
-        pass
-    spread = max_gain - max_loss
 
     adv_top_color    = GREEN if pct_adv >= 50 else RED
     median_top_color = GREEN if median_chg >= 0 else RED
 
+    # Universe card — clickable to show all tracked companies
+    from config.company_registry import COMPANY_REGISTRY
+    all_names = sorted([c["name"] for c in COMPANY_REGISTRY])
+    names_list_html = "".join(
+        f'<div style="padding:3px 0;font-size:12px;color:#374151;'
+        f'border-bottom:1px solid #F3F4F6;">{_html_lib.escape(n)}</div>'
+        for n in all_names
+    )
+    universe_popup = (
+        f'<details style="margin-top:6px;">'
+        f'<summary style="font-size:11px;color:#3B82F6;cursor:pointer;font-weight:500;">'
+        f'View all companies</summary>'
+        f'<div style="max-height:300px;overflow-y:auto;margin-top:6px;'
+        f'padding:8px;background:#F9FAFB;border-radius:6px;border:1px solid #E5E7EB;">'
+        f'{names_list_html}</div></details>'
+    )
+
     cards_html = '<div class="stat-grid">'
     cards_html += _stat_card("Universe", str(total_valid),
-                              sub="companies tracked", top_color="#4A90D9")
+                              sub="companies tracked",
+                              extra_html=universe_popup,
+                              top_color="#4A90D9")
     cards_html += _stat_card(
-        f"{period_label} Adv / Dec", "",
+        f"{period_label} Advancing / Declining", "",
         extra_html=advdec_gauge,
         top_color=adv_top_color,
     )
     cards_html += _stat_card(
         f"Median {period_label} Change", median_fmt,
-        delta_val=median_chg,
         sub=sentiment_pill,
         top_color=median_top_color,
     )
@@ -1392,11 +1407,6 @@ def _render_stat_cards(data, change_col):
         f"Worst {period_label} Performer", "",
         extra_html=worst_val_html,
         top_color=RED,
-    )
-    cards_html += _stat_card(
-        f"{period_label} Spread", f"{spread:.1f}pp",
-        sub="Best vs. worst performer",
-        top_color="#4A90D9",
     )
     cards_html += '</div>'
     st.markdown(cards_html, unsafe_allow_html=True)
@@ -1752,11 +1762,11 @@ st.markdown(
 )
 render_multi_period_view(all_data)
 
-# ── Section 3: Detailed Movers ────────────────────────────────────────────────
+# ── Section 3: Top Winners and Losers ─────────────────────────────────────────
 st.markdown(
     '<div style="height:32px;"></div>'
     '<div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:4px;">'
-    'Detailed Movers</div>'
+    'Top Winners and Losers</div>'
     '<div style="font-size:14px;color:#94A3B8;margin-bottom:12px;">'
     'Full company data for top 25 winners and losers by period</div>',
     unsafe_allow_html=True,
@@ -1853,8 +1863,8 @@ for _tab_obj, _change_col, _period_label in [
         _as_of_str = latest_date_str if latest_date_str else "—"
         st.markdown(
             f'<div style="font-size:11px;color:#94A3B8;margin-top:12px;padding-left:4px;">'
-            f'Share price data from Yahoo Finance  ·  '
-            f'Multiples &amp; financials from FactSet  ·  '
+            f'<span style="color:#64748B;font-weight:500;">Source:</span> '
+            f'FactSet (fundamentals &amp; estimates) · Yahoo Finance (share prices)  ·  '
             f'Data as of {_as_of_str}'
             f'</div>',
             unsafe_allow_html=True,
