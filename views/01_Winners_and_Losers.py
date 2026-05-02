@@ -432,18 +432,25 @@ cards += (
 
 # Advancing / Declining
 if not returns.empty:
-    total_with_data = len(returns)
-    up_count = int((returns >= 0).sum())
+    _clean_ret = returns.dropna()
+    total_with_data = len(_clean_ret)
+    up_count = int((_clean_ret >= 0).sum())
     down_count = total_with_data - up_count
     pct_adv = up_count / total_with_data * 100 if total_with_data else 0
 
     # Build advancing/declining lists sorted by return (most → least)
-    adv_series = returns[returns >= 0].sort_values(ascending=False)
-    dec_series = returns[returns < 0].sort_values(ascending=True)
+    adv_series = _clean_ret[_clean_ret >= 0].sort_values(ascending=False)
+    dec_series = _clean_ret[_clean_ret < 0].sort_values(ascending=True)
 
     def _build_return_list(series, color, sign_prefix=""):
         items = ""
         for t, ret_val in series.items():
+            try:
+                rv = float(ret_val)
+                if np.isnan(rv):
+                    continue
+            except (TypeError, ValueError):
+                continue
             co = ticker_to_co.get(t, {})
             seg_key = co.get("segment", "")
             seg_color = SEGMENT_COLORS.get(seg_key, "#6B7280")
@@ -459,7 +466,7 @@ if not returns.empty:
                 f'<span style="color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;'
                 f'white-space:nowrap;">{_lh}{_html_lib.escape(short)}</span>'
                 f'<span style="color:{color};font-weight:700;white-space:nowrap;'
-                f'font-variant-numeric:tabular-nums;">{sign_prefix}{ret_val:.0f}%</span>'
+                f'font-variant-numeric:tabular-nums;">{sign_prefix}{rv:.0f}%</span>'
                 f'</div>'
             )
         return items
@@ -507,8 +514,10 @@ if not returns.empty:
         seg_ticks = [t for t, s in ticker_seg_map.items() if s == sk and t in returns.index]
         if not seg_ticks:
             continue
-        seg_med = float(returns[seg_ticks].median())
-        _seg_med_list.append((sk, seg_med))
+        seg_med = returns[seg_ticks].median()
+        if pd.isna(seg_med):
+            continue
+        _seg_med_list.append((sk, float(seg_med)))
     _seg_med_list.sort(key=lambda x: x[1], reverse=True)
 
     _seg_medians = ""
@@ -680,19 +689,26 @@ if series_map:
 
     if label_items:
         label_items.sort(key=lambda x: x[1])
-        # Adjust Y positions for label spacing (but display actual values)
-        adj_y = [it[1] for it in label_items]
-        for i in range(1, len(adj_y)):
-            if adj_y[i] - adj_y[i - 1] < 6:
-                adj_y[i] = adj_y[i - 1] + 6
+        # Place labels at actual y values with small spacing to prevent overlap
+        # Use yshift (pixels) for spacing so labels stay near their line
+        positions = [it[1] for it in label_items]
+        # Convert to pixel offsets for overlap avoidance (approx 16px per label)
+        min_gap_px = 16
+        y_shifts = [0.0] * len(positions)
+        for i in range(1, len(positions)):
+            # Rough: 1 data unit ≈ some pixels, use small nudge
+            if positions[i] - positions[i - 1] < 3:
+                y_shifts[i] = min_gap_px * (i - (len(positions) // 2))
 
-        for (name, actual_val, color), label_y in zip(label_items, adj_y):
+        for idx, (name, actual_val, color) in enumerate(label_items):
             fig.add_annotation(
-                x=1.0, xref="paper", xanchor="left", y=label_y,
+                x=1.0, xref="paper", xanchor="left",
+                y=actual_val,
+                yshift=y_shifts[idx],
                 text=f"<b>{name}  {actual_val:.0f}</b>",
                 showarrow=False, xshift=10,
                 font=dict(size=10, color="white", family="DM Sans"),
-                bgcolor=color, borderpad=5, bordercolor=color, borderwidth=1,
+                bgcolor=color, borderpad=4, bordercolor=color, borderwidth=1,
             )
 
     # Compute y-axis range with padding
@@ -739,7 +755,7 @@ if not returns.empty:
     bucket_labels = ["Down >10%", "-10% to -5%", "-5% to 0%", "0% to +5%", "+5% to +10%", "Up >10%"]
     bucket_colors = ["#DC2626", "#EF4444", "#FCA5A5", "#86EFAC", "#22C55E", "#059669"]
     counts = [0] * 6
-    for c in returns.values:
+    for c in returns.dropna().values:
         if c < -10: counts[0] += 1
         elif c < -5: counts[1] += 1
         elif c < 0: counts[2] += 1
