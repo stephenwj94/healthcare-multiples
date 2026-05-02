@@ -1,8 +1,8 @@
 """
-Overview V2 — Compact dashboard view.
+Overview — Compact healthcare dashboard.
 
-Everything visible without scrolling: segment chart, key stats,
-distribution, and top movers all in a single dense layout.
+Single-screen layout: segment chart, key stats, distribution, top movers.
+Market-cap weighted segment indices, expandable details everywhere.
 """
 
 import streamlit as st
@@ -30,26 +30,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 .block-container {
     max-width: 100% !important;
-    padding: 1rem 2rem !important;
+    padding: 0.8rem 2rem 1rem 2rem !important;
     font-family: 'DM Sans', sans-serif !important;
 }
 .stApp { background-color: #FAFBFC !important; }
 .main .block-container { background-color: #FAFBFC !important; color: #1A1A2E !important; }
-h1,h2,h3,h4,h5,h6 { color: #111827 !important; }
 /* Tighter Streamlit spacing */
 div[data-testid="stVerticalBlock"] > div { padding-top: 0 !important; }
-div[data-testid="stHorizontalBlock"] { gap: 0.5rem !important; }
 /* Compact stat boxes */
 .v2-card {
     background: white; border: 1px solid #E5E7EB; border-radius: 10px;
-    padding: 12px 16px; height: 100%;
+    padding: 10px 14px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 .v2-card-title {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #6B7280; margin-bottom: 6px;
+    letter-spacing: 0.06em; color: #6B7280; margin-bottom: 4px;
 }
-.v2-big { font-size: 24px; font-weight: 800; color: #111827; line-height: 1.1; }
+.v2-big { font-size: 22px; font-weight: 800; color: #111827; line-height: 1.1; }
 .v2-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 /* Checkbox pills */
 div[data-testid="stCheckbox"] label {
@@ -63,10 +61,31 @@ div[data-testid="stCheckbox"] label p {
 div[data-testid="stColumn"] {
     flex: 1 1 0 !important; min-width: 0 !important;
 }
+/* Expandable details styling */
+details summary { list-style: none; cursor: pointer; user-select: none; }
+details summary::-webkit-details-marker { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
 render_sidebar()
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def _hex_to_rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+def _safe_float(val, default=None):
+    try:
+        f = float(val)
+        return default if (np.isnan(f) or np.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
+
+def _fmt_tev(ev_f):
+    if ev_f and ev_f > 0:
+        return f"${ev_f/1e9:.1f}B" if ev_f >= 1e9 else f"${ev_f/1e6:.0f}M"
+    return "\u2014"
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 db = DBManager(DB_PATH)
@@ -86,8 +105,18 @@ if not all_data:
 raw_dates = [d.get("snapshot_date") for d in all_data if d.get("snapshot_date")]
 as_of = (max(pd.Timestamp(str(d)[:10]) for d in raw_dates)
          if raw_dates else pd.Timestamp.today().normalize())
+date_str = as_of.strftime("%b %d, %Y")
 
-# ── Controls: period + segment filters in one row ─────────────────────────────
+# ── Header ────────────────────────────────────────────────────────────────────
+st.markdown(
+    f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px;">'
+    f'<span style="font-size:22px;font-weight:800;color:#111827;">Overview</span>'
+    f'<span style="font-size:12px;color:#9CA3AF;">Healthcare universe performance '
+    f'&middot; {date_str}</span></div>',
+    unsafe_allow_html=True,
+)
+
+# ── Controls ──────────────────────────────────────────────────────────────────
 seg_keys = list(SEGMENT_DISPLAY.keys())
 _CB_LABELS = {
     "pharma": "Pharma", "consumer_health": "Consumer", "medtech": "MedTech",
@@ -95,29 +124,29 @@ _CB_LABELS = {
     "cdmo": "Asset-Heavy", "health_tech": "Health Tech",
 }
 _SEG_ICONS = {
-    "pharma": "💊", "consumer_health": "🛒", "medtech": "🩺",
-    "life_sci_tools": "🔬", "services": "🏥", "cdmo": "⚗️", "health_tech": "💻",
+    "pharma": "\U0001f48a", "consumer_health": "\U0001f6d2", "medtech": "\U0001fa7a",
+    "life_sci_tools": "\U0001f52c", "services": "\U0001f3e5", "cdmo": "\u2697\ufe0f",
+    "health_tech": "\U0001f4bb",
 }
 
-_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD"]
+_PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD", "3Y", "5Y"]
 _PERIOD_LABELS = {
-    "1W": "Last Week", "1M": "Last Month", "3M": "Last 3 Months",
-    "6M": "Last 6 Months", "12M": "Last 12 Months", "YTD": "Year to Date",
+    "1W": "1 Week", "1M": "1 Month", "3M": "3 Months",
+    "6M": "6 Months", "12M": "12 Months", "YTD": "Year to Date",
+    "3Y": "3 Years", "5Y": "5 Years",
 }
 
-# Period selector
-_pc, _ = st.columns([2, 8])
-with _pc:
+# Period + segments in one row
+_lbl_col, _sel_col, *_seg_cols = st.columns([0.5, 0.6] + [1] * len(seg_keys))
+with _lbl_col:
+    st.markdown('<div style="font-size:12px;font-weight:600;color:#374151;'
+                'padding-top:8px;">Period</div>', unsafe_allow_html=True)
+with _sel_col:
     selected_period = st.selectbox("Period", _PERIOD_OPTIONS, index=0,
                                    key="v2_period", label_visibility="collapsed")
 period_label = _PERIOD_LABELS[selected_period]
 
-# Segment checkboxes — compact row
-def _hex_to_rgba(hex_color, alpha):
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
-
+# Segment pill CSS
 _pill_css = "<style>\n"
 for seg_key in seg_keys:
     color = SEGMENT_COLORS.get(seg_key, "#6B7280")
@@ -140,7 +169,6 @@ for seg_key in seg_keys:
 _pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
 
-_seg_cols = st.columns([1] * len(seg_keys))
 selected_segments = set()
 for i, sk in enumerate(seg_keys):
     with _seg_cols[i]:
@@ -158,14 +186,16 @@ def _period_start(period, ref):
     ref = pd.Timestamp(ref)
     m = {"1W": pd.Timedelta(weeks=1), "1M": pd.DateOffset(months=1),
          "3M": pd.DateOffset(months=3), "6M": pd.DateOffset(months=6),
-         "12M": pd.DateOffset(months=12)}
+         "12M": pd.DateOffset(months=12),
+         "3Y": pd.DateOffset(years=3), "5Y": pd.DateOffset(years=5)}
     if period == "YTD":
         return pd.Timestamp(f"{ref.year - 1}-12-31")
     return ref - m.get(period, pd.Timedelta(weeks=1))
 
 all_tickers = sorted({d.get("ticker") for d in all_data if d.get("ticker")})
 filtered_tickers = sorted({d.get("ticker") for d in filtered_data if d.get("ticker")})
-months_needed = {"1W": 3, "1M": 5, "3M": 8, "6M": 14, "12M": 14, "YTD": 14}.get(selected_period, 14)
+months_needed = {"1W": 3, "1M": 5, "3M": 8, "6M": 14, "12M": 14,
+                 "YTD": 14, "3Y": 38, "5Y": 62}.get(selected_period, 14)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _fetch_prices(tickers_tuple, months):
@@ -231,127 +261,196 @@ def _compute_returns(cdf, ref_date, period, tlist=None):
 
 returns = _compute_returns(close_df, as_of, selected_period, filtered_tickers)
 ticker_to_co = {d["ticker"]: d for d in all_data if d.get("ticker")}
+ticker_seg_map = {d["ticker"]: d["segment"] for d in filtered_data if d.get("ticker")}
 
-def _safe_float(val, default=None):
-    try:
-        f = float(val)
-        return default if (np.isnan(f) or np.isinf(f)) else f
-    except (TypeError, ValueError):
-        return default
+# Market cap weights per ticker
+_ticker_mcap = {}
+for d in all_data:
+    t = d.get("ticker")
+    mc = d.get("market_cap") or d.get("enterprise_value")
+    if t and mc:
+        mcf = _safe_float(mc)
+        if mcf and mcf > 0:
+            _ticker_mcap[t] = mcf
 
-# ── ROW 1: Stats + Segment Chart side by side ─────────────────────────────────
-left_col, right_col = st.columns([3, 7])
+# ── ROW 1: Stats + Segment Chart ─────────────────────────────────────────────
+left_col, right_col = st.columns([3, 7], gap="small")
 
 with left_col:
-    # Quick stats as compact cards
     _clean = returns.dropna()
     n_total = len(filtered_data)
     n_with_data = len(_clean)
     up = int((_clean >= 0).sum()) if n_with_data else 0
     down = n_with_data - up
     pct_adv = up / n_with_data * 100 if n_with_data else 0
-    med_ret = float(_clean.median()) if n_with_data else 0
 
+    # Universe + Advancing side by side
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
-        # Universe
-        f'<div class="v2-card"><div class="v2-card-title">Universe</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+        f'<div class="v2-card" title="Source: FactSet fundamentals">'
+        f'<div class="v2-card-title">Universe</div>'
         f'<div class="v2-big">{n_total}</div>'
-        f'<div class="v2-sub">{n_with_data} with data</div></div>'
-        # Advancing
-        f'<div class="v2-card"><div class="v2-card-title">Advancing</div>'
+        f'<div class="v2-sub">{n_with_data} with price data</div></div>'
+        f'<div class="v2-card" title="Source: Yahoo Finance prices">'
+        f'<div class="v2-card-title">Advancing</div>'
         f'<div class="v2-big" style="color:{GREEN};">{pct_adv:.0f}%</div>'
-        f'<div class="v2-sub"><span style="color:{GREEN};font-weight:700;">{up}</span> up &nbsp;'
+        f'<div class="v2-sub"><span style="color:{GREEN};font-weight:700;">{up}</span> up '
         f'<span style="color:{RED};font-weight:700;">{down}</span> down</div></div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    # Median by segment — ultra compact
-    ticker_seg_map = {d["ticker"]: d["segment"] for d in filtered_data if d.get("ticker")}
-    _seg_rows = ""
-    _seg_med_list = []
+    # Market-cap weighted return by segment — expandable
+    _seg_data = []
     for sk in seg_keys:
         if sk not in selected_segments:
             continue
         seg_t = [t for t, s in ticker_seg_map.items() if s == sk and t in returns.index]
         if not seg_t:
             continue
-        sm = returns[seg_t].median()
-        if pd.isna(sm):
+        # Market-cap weighted return
+        seg_rets = returns[seg_t]
+        seg_weights = pd.Series({t: _ticker_mcap.get(t, 1.0) for t in seg_t})
+        ws = seg_weights.sum()
+        if ws > 0 and not pd.isna(ws):
+            seg_weights = seg_weights / ws
+            wcr = (seg_rets * seg_weights).sum()
+        else:
+            wcr = seg_rets.mean()
+        if pd.isna(wcr):
             continue
-        _seg_med_list.append((sk, float(sm)))
-    _seg_med_list.sort(key=lambda x: x[1], reverse=True)
+        # Individual tickers sorted by return
+        tickers_sorted = seg_rets.sort_values(ascending=False)
+        _seg_data.append((sk, float(wcr), tickers_sorted))
+    _seg_data.sort(key=lambda x: x[1], reverse=True)
 
-    _max_abs = max((abs(m) for _, m in _seg_med_list), default=1) or 1
-    for sk, sm in _seg_med_list:
+    _max_abs = max((abs(m) for _, m, _ in _seg_data), default=1) or 1
+    _seg_html = ""
+    for sk, wcr, tickers_sorted in _seg_data:
         sc = SEGMENT_COLORS.get(sk, "#6B7280")
         sn = _CB_LABELS.get(sk, sk)
-        s_color = GREEN if sm >= 0 else RED
-        bar_pct = min(abs(sm) / _max_abs * 100, 100)
-        _seg_rows += (
-            f'<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;">'
+        icon = _SEG_ICONS.get(sk, "")
+        s_color = GREEN if wcr >= 0 else RED
+        bar_pct = min(abs(wcr) / _max_abs * 100, 100)
+        # Build expandable list of tickers
+        _ticker_rows = ""
+        for t, rv in tickers_sorted.items():
+            co = ticker_to_co.get(t, {})
+            name = str(co.get("name") or t)
+            logo = logo_img_tag(t, size=11)
+            lh = f'{logo}&nbsp;' if logo else ''
+            tc = GREEN if rv >= 0 else RED
+            _ticker_rows += (
+                f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
+                f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
+                f'title="{_html_lib.escape(name)} — Source: Yahoo Finance">{_html_lib.escape(t)}</span>'
+                f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
+                f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
+                f'<span style="color:{tc};font-weight:700;font-variant-numeric:tabular-nums;">'
+                f'{"+" if rv >= 0 else ""}{rv:.1f}%</span></div>'
+            )
+
+        _seg_html += (
+            f'<details style="margin-bottom:2px;">'
+            f'<summary style="display:flex;align-items:center;gap:5px;padding:2px 0;">'
             f'<span style="width:7px;height:7px;border-radius:50%;background:{sc};flex-shrink:0;"></span>'
-            f'<span style="color:#374151;width:70px;font-weight:500;">{_html_lib.escape(sn)}</span>'
-            f'<div style="flex:1;height:4px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
-            f'<div style="height:100%;width:{bar_pct:.0f}%;background:{sc};border-radius:2px;"></div></div>'
-            f'<span style="color:{s_color};font-weight:700;width:45px;text-align:right;'
-            f'font-variant-numeric:tabular-nums;">{"+" if sm >= 0 else ""}{sm:.1f}%</span>'
-            f'</div>'
+            f'<span style="color:#374151;font-size:11px;font-weight:500;width:68px;">{_html_lib.escape(sn)}</span>'
+            f'<span style="flex:1;height:4px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
+            f'<span style="display:block;height:100%;width:{bar_pct:.0f}%;background:{sc};'
+            f'border-radius:2px;"></span></span>'
+            f'<span style="color:{s_color};font-weight:700;font-size:11px;width:48px;text-align:right;'
+            f'font-variant-numeric:tabular-nums;" title="Market-cap weighted return — Source: Yahoo Finance">'
+            f'{"+" if wcr >= 0 else ""}{wcr:.1f}%</span>'
+            f'<span style="color:#CBD5E1;font-size:9px;"> \u25B8</span>'
+            f'</summary>'
+            f'<div style="margin:2px 0 4px 12px;padding:4px 8px;background:#F9FAFB;'
+            f'border-radius:6px;border:1px solid #F3F4F6;max-height:160px;overflow-y:auto;">'
+            f'{_ticker_rows}</div></details>'
         )
 
     st.markdown(
-        f'<div class="v2-card" style="margin-bottom:10px;">'
-        f'<div class="v2-card-title">Median {selected_period} by Segment</div>'
-        f'{_seg_rows}</div>',
+        f'<div class="v2-card" style="margin-bottom:8px;" '
+        f'title="Market-cap weighted {period_label.lower()} return by segment — Source: Yahoo Finance">'
+        f'<div class="v2-card-title">{period_label} by Segment '
+        f'<span style="font-weight:400;text-transform:none;color:#9CA3AF;">'
+        f'(mcap-weighted \u2022 click to expand)</span></div>'
+        f'{_seg_html}</div>',
         unsafe_allow_html=True,
     )
 
-    # Distribution — inline mini bar chart
+    # Distribution — expandable buckets
     if n_with_data:
-        bucket_labels = [">10%\u2193", "5-10\u2193", "0-5\u2193", "0-5\u2191", "5-10\u2191", ">10%\u2191"]
-        bucket_colors = ["#DC2626", "#EF4444", "#FCA5A5", "#86EFAC", "#22C55E", "#059669"]
-        counts = [0] * 6
-        for c in _clean.values:
-            cv = float(c)
-            if cv < -10: counts[0] += 1
-            elif cv < -5: counts[1] += 1
-            elif cv < 0: counts[2] += 1
-            elif cv < 5: counts[3] += 1
-            elif cv < 10: counts[4] += 1
-            else: counts[5] += 1
-        max_c = max(counts) or 1
-        _dist_bars = ""
-        for lbl, cnt, clr in zip(bucket_labels, counts, bucket_colors):
+        bucket_defs = [
+            ("Down >10%", -999, -10, "#DC2626"),
+            ("-5% to -10%", -10, -5, "#EF4444"),
+            ("-0% to -5%", -5, 0, "#FCA5A5"),
+            ("+0% to +5%", 0, 5, "#86EFAC"),
+            ("+5% to +10%", 5, 10, "#22C55E"),
+            ("Up >10%", 10, 999, "#059669"),
+        ]
+        buckets = {lbl: [] for lbl, _, _, _ in bucket_defs}
+        for t, rv in _clean.items():
+            cv = float(rv)
+            for lbl, lo, hi, _ in bucket_defs:
+                if lo <= cv < hi or (hi == 999 and cv >= lo) or (lo == -999 and cv < hi):
+                    buckets[lbl].append((t, cv))
+                    break
+
+        max_c = max(len(v) for v in buckets.values()) or 1
+        _dist_html = ""
+        for lbl, lo, hi, clr in bucket_defs:
+            items = sorted(buckets[lbl], key=lambda x: x[1], reverse=True)
+            cnt = len(items)
             bw = cnt / max_c * 100
-            _dist_bars += (
-                f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
-                f'<span style="width:42px;color:#6B7280;text-align:right;">{lbl}</span>'
-                f'<div style="flex:1;height:10px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
-                f'<div style="height:100%;width:{bw:.0f}%;background:{clr};border-radius:2px;"></div></div>'
-                f'<span style="width:20px;color:#374151;font-weight:600;">{cnt}</span>'
-                f'</div>'
+            # Expandable ticker list
+            _inner = ""
+            for t, cv in items:
+                co = ticker_to_co.get(t, {})
+                name = str(co.get("name") or t)
+                sk = co.get("segment", "")
+                sc = SEGMENT_COLORS.get(sk, "#6B7280")
+                tc = GREEN if cv >= 0 else RED
+                _inner += (
+                    f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
+                    f'<span style="width:5px;height:5px;border-radius:50%;background:{sc};flex-shrink:0;"></span>'
+                    f'<span style="color:#3B82F6;font-weight:600;width:44px;" '
+                    f'title="{_html_lib.escape(name)}">{_html_lib.escape(t)}</span>'
+                    f'<span style="color:{tc};font-weight:600;margin-left:auto;'
+                    f'font-variant-numeric:tabular-nums;">{"+" if cv >= 0 else ""}{cv:.1f}%</span></div>'
+                )
+
+            _dist_html += (
+                f'<details style="margin-bottom:1px;">'
+                f'<summary style="display:flex;align-items:center;gap:3px;padding:1px 0;font-size:10px;">'
+                f'<span style="width:52px;color:#6B7280;text-align:right;flex-shrink:0;">{lbl}</span>'
+                f'<span style="flex:1;height:10px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
+                f'<span style="display:block;height:100%;width:{bw:.0f}%;background:{clr};'
+                f'border-radius:2px;"></span></span>'
+                f'<span style="width:22px;color:#374151;font-weight:600;">{cnt}</span>'
+                f'<span style="color:#CBD5E1;font-size:8px;"> \u25B8</span>'
+                f'</summary>'
+                f'<div style="margin:1px 0 3px 55px;padding:3px 6px;background:#F9FAFB;'
+                f'border-radius:4px;border:1px solid #F3F4F6;max-height:120px;overflow-y:auto;">'
+                f'{_inner or "<span style=&quot;color:#9CA3AF;font-size:10px;&quot;>None</span>"}'
+                f'</div></details>'
             )
+
         st.markdown(
-            f'<div class="v2-card">'
-            f'<div class="v2-card-title">{period_label} Distribution</div>'
-            f'{_dist_bars}</div>',
+            f'<div class="v2-card" title="Source: Yahoo Finance">'
+            f'<div class="v2-card-title">{period_label} Distribution '
+            f'<span style="font-weight:400;text-transform:none;color:#9CA3AF;">'
+            f'(click to expand)</span></div>'
+            f'{_dist_html}</div>',
             unsafe_allow_html=True,
         )
 
 with right_col:
-    # Segment performance chart — compact
-    ticker_segment = {d["ticker"]: d["segment"] for d in all_data if d.get("ticker") and d.get("segment")}
-    _ticker_mcap = {}
-    for d in all_data:
-        t = d.get("ticker")
-        mc = d.get("market_cap") or d.get("enterprise_value")
-        if t and mc:
-            mcf = _safe_float(mc)
-            if mcf and mcf > 0:
-                _ticker_mcap[t] = mcf
+    # Segment performance chart
+    ticker_segment = {d["ticker"]: d["segment"] for d in all_data
+                      if d.get("ticker") and d.get("segment")}
 
-    chart_months = {"1W": 1, "1M": 3, "3M": 6, "6M": 12, "12M": 12, "YTD": 12}.get(selected_period, 12)
+    chart_months = {"1W": 1, "1M": 3, "3M": 6, "6M": 12, "12M": 12,
+                    "YTD": 12, "3Y": 36, "5Y": 60}.get(selected_period, 12)
     chart_start = as_of - pd.DateOffset(months=chart_months)
 
     series_map = {}
@@ -361,7 +460,8 @@ with right_col:
             for sk in seg_keys:
                 if sk not in selected_segments:
                     continue
-                seg_t = [t for t, s in ticker_segment.items() if s == sk and t in hc_daily.columns]
+                seg_t = [t for t, s in ticker_segment.items()
+                         if s == sk and t in hc_daily.columns]
                 if not seg_t:
                     continue
                 sp = hc_daily[seg_t].dropna(axis=1, how="all")
@@ -412,7 +512,8 @@ with right_col:
                 hovertemplate=f"<b>{sn}</b>: %{{y:.1f}}<extra></extra>",
             ))
 
-        fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8", line_width=1, opacity=0.5)
+        fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8",
+                      line_width=1, opacity=0.5)
 
         # Y range
         all_y = []
@@ -459,14 +560,24 @@ with right_col:
                     bgcolor=color, borderpad=3, bordercolor=color, borderwidth=1,
                 )
 
-        tick_fmt = "%b '%y" if chart_months > 3 else "%b %d"
+        # X-axis ticks — clean month boundaries
+        if chart_months <= 3:
+            dtick = "M1"
+            tick_fmt = "%b %d"
+        elif chart_months <= 12:
+            dtick = "M2"
+            tick_fmt = "%b '%y"
+        else:
+            dtick = "M6"
+            tick_fmt = "%b '%y"
+
         fig.update_layout(
-            height=310,
-            margin=dict(l=35, r=160, t=8, b=30),
+            height=340,
+            margin=dict(l=35, r=150, t=6, b=28),
             plot_bgcolor="white", paper_bgcolor="white",
             font=dict(family="DM Sans, sans-serif"),
             showlegend=False,
-            xaxis=dict(showgrid=False, tickformat=tick_fmt,
+            xaxis=dict(showgrid=False, tickformat=tick_fmt, dtick=dtick,
                        tickfont=dict(size=9, color="#9CA3AF"),
                        linecolor="#E5E7EB", fixedrange=True,
                        range=[chart_start, as_of]),
@@ -480,9 +591,10 @@ with right_col:
         )
 
         st.markdown(
-            f'<div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:2px;">'
+            f'<div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:1px;">'
             f'Segment Performance</div>'
-            f'<div style="font-size:10px;color:#9CA3AF;margin-bottom:4px;">'
+            f'<div style="font-size:10px;color:#9CA3AF;margin-bottom:2px;"'
+            f' title="Source: Yahoo Finance. Weighted by market cap.">'
             f'Market-cap weighted, rebased to 100 ({period_label.lower()})</div>',
             unsafe_allow_html=True,
         )
@@ -491,111 +603,192 @@ with right_col:
     else:
         st.caption("Not enough price history for chart.")
 
-# ── ROW 2: Top 10 Winners + Top 10 Losers side by side ───────────────────────
+
+# ── ROW 2: Top Winners + Top Losers ──────────────────────────────────────────
+def _est_beg_multiple(cur_mult, pct_chg, cur_tev, cur_mcap):
+    """Estimate beginning-of-period multiple from price change."""
+    if not all(v and v > 0 for v in [cur_mult, cur_tev, cur_mcap]):
+        return None
+    div = 1 + pct_chg / 100
+    if div <= 0:
+        return None
+    beg_mcap = cur_mcap / div
+    beg_tev = beg_mcap + (cur_tev - cur_mcap)
+    if beg_tev <= 0:
+        return None
+    denom = cur_tev / cur_mult
+    return beg_tev / denom if denom > 0 else None
+
+
+def _mini_spark(ticker, color="#3B82F6"):
+    if close_df.empty or ticker not in close_df.columns:
+        return ""
+    s = close_df[ticker]
+    s = s[(s.index >= _period_start(selected_period, as_of)) & (s.index <= as_of)].dropna()
+    if len(s) < 3:
+        return ""
+    vals = s.values.tolist()
+    ymin, ymax = min(vals), max(vals)
+    yr = ymax - ymin if ymax != ymin else 1
+    w, h = 56, 16
+    pts = []
+    for j, v in enumerate(vals):
+        x = j / (len(vals) - 1) * w
+        y = h - ((v - ymin) / yr * (h - 2) + 1)
+        pts.append(f"{x:.1f},{y:.1f}")
+    return (
+        f'<svg width="{w}" height="{h}" style="vertical-align:middle;">'
+        f'<path d="M{"L".join(pts)}" fill="none" stroke="{color}" '
+        f'stroke-width="1.5" stroke-linecap="round"/></svg>'
+    )
+
+
+def _beg_now_cell(beg_val, now_val, cap=75):
+    """Format a 'beg → now' cell."""
+    if now_val and 0 < now_val < cap:
+        if beg_val and 0 < beg_val < cap:
+            return (f'<span style="color:#9CA3AF;font-size:10px;">{beg_val:.1f}x</span>'
+                    f'<span style="color:#CBD5E1;"> \u2192 </span>'
+                    f'<b>{now_val:.1f}x</b>')
+        return f'<b>{now_val:.1f}x</b>'
+    return "N/M"
+
+
 if not returns.empty:
-    _spark_start = _period_start(selected_period, as_of)
+    st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
 
-    def _mini_spark(ticker, color="#3B82F6"):
-        if close_df.empty or ticker not in close_df.columns:
-            return ""
-        s = close_df[ticker]
-        s = s[(s.index >= _spark_start) & (s.index <= as_of)].dropna()
-        if len(s) < 3:
-            return ""
-        vals = s.values.tolist()
-        ymin, ymax = min(vals), max(vals)
-        yr = ymax - ymin if ymax != ymin else 1
-        w, h = 60, 18
-        pts = []
-        for j, v in enumerate(vals):
-            x = j / (len(vals) - 1) * w
-            y = h - ((v - ymin) / yr * (h - 2) + 1)
-            pts.append(f"{x:.1f},{y:.1f}")
-        return (
-            f'<svg width="{w}" height="{h}" style="vertical-align:middle;">'
-            f'<path d="M{"L".join(pts)}" fill="none" stroke="{color}" '
-            f'stroke-width="1.5" stroke-linecap="round"/></svg>'
-        )
+    _sub_hdr = '<span style="font-weight:400;font-size:7px;color:#9CA3AF;">BEG\u2192NOW</span>'
+    _tbl_header = (
+        '<tr>'
+        '<th style="text-align:center;width:22px;padding:3px 4px;">#</th>'
+        '<th style="text-align:left;padding:3px 6px;width:54px;">Ticker</th>'
+        '<th style="text-align:right;width:48px;padding:3px 4px;">TEV</th>'
+        f'<th style="text-align:center;width:90px;padding:3px 2px;">Rev x {_sub_hdr}</th>'
+        f'<th style="text-align:center;width:100px;padding:3px 2px;">EBITDA x {_sub_hdr}</th>'
+        '<th style="text-align:right;width:44px;padding:3px 4px;">Gr%</th>'
+        '<th style="text-align:right;width:44px;padding:3px 4px;">Mgn%</th>'
+        '<th style="text-align:right;width:58px;padding:3px 4px;">\u0394 Price</th>'
+        '<th style="text-align:center;width:60px;padding:3px 2px;">Chart</th>'
+        '</tr>'
+    )
 
-    def _movers_table(items, accent_color, title, sign=""):
+    def _movers_rows(items, accent, sign="", limit=10):
         rows = ""
-        for i, (ticker, pct) in enumerate(items, 1):
+        for i, (ticker, pct) in enumerate(items[:limit], 1):
             pv = _safe_float(pct)
             if pv is None:
                 continue
             co = ticker_to_co.get(ticker, {})
+            name = str(co.get("name") or ticker)
             logo = logo_img_tag(ticker, size=12)
             lh = f'{logo}&nbsp;' if logo else ''
-            name = str(co.get("name") or ticker)
-            short = (name[:22] + "\u2026") if len(name) > 23 else name
             sk = co.get("segment", "")
             sc = SEGMENT_COLORS.get(sk, "#6B7280")
-            spark = _mini_spark(ticker, accent_color)
 
             ev_f = _safe_float(co.get("enterprise_value"))
-            tev = f"${ev_f/1e9:.1f}B" if ev_f and ev_f >= 1e9 else (f"${ev_f/1e6:.0f}M" if ev_f and ev_f > 0 else "\u2014")
+            mcap_f = _safe_float(co.get("market_cap"))
 
-            rev_f = _safe_float(co.get("ntm_tev_rev"))
-            rev = f"{rev_f:.1f}x" if rev_f and 0 < rev_f < 75 else "N/M"
+            rev_now = _safe_float(co.get("ntm_tev_rev"))
+            rev_beg = _est_beg_multiple(rev_now, pv, ev_f, mcap_f)
+            rev_cell = _beg_now_cell(rev_beg, rev_now)
+
+            ebitda_now = _safe_float(co.get("ntm_tev_ebitda"))
+            ebitda_beg = _est_beg_multiple(ebitda_now, pv, ev_f, mcap_f)
+            ebitda_cell = _beg_now_cell(ebitda_beg, ebitda_now, cap=150)
+
+            gr_f = _safe_float(co.get("ntm_revenue_growth"))
+            gr_str = f'{gr_f*100:+.0f}%' if gr_f is not None else "\u2014"
+
+            mgn_f = _safe_float(co.get("ebitda_margin"))
+            mgn_str = f'{mgn_f*100:.0f}%' if mgn_f is not None else "\u2014"
+
+            spark = _mini_spark(ticker, accent)
 
             rows += (
-                f'<tr>'
-                f'<td style="text-align:center;font-size:11px;color:#9CA3AF;width:24px;">{i}</td>'
-                f'<td style="text-align:left;font-size:11px;">{lh}'
-                f'<span style="color:#3B82F6;font-weight:600;">{_html_lib.escape(ticker)}</span></td>'
-                f'<td style="text-align:left;font-size:11px;color:#374151;max-width:140px;'
-                f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{_html_lib.escape(short)}</td>'
-                f'<td style="text-align:right;font-size:11px;color:#6B7280;">{tev}</td>'
-                f'<td style="text-align:right;font-size:11px;color:#6B7280;">{rev}</td>'
-                f'<td style="text-align:right;font-weight:700;font-size:12px;color:{accent_color};">'
-                f'{sign}{pv:.1f}%</td>'
-                f'<td style="text-align:center;">{spark}</td>'
+                f'<tr title="{_html_lib.escape(name)} \u2014 Source: Yahoo Finance / FactSet">'
+                f'<td style="text-align:center;font-size:10px;color:#9CA3AF;padding:3px 4px;">{i}</td>'
+                f'<td style="text-align:left;padding:3px 6px;font-size:11px;">'
+                f'<span style="width:6px;height:6px;border-radius:50%;background:{sc};'
+                f'display:inline-block;vertical-align:middle;margin-right:3px;" '
+                f'title="{_html_lib.escape(_CB_LABELS.get(sk, sk))}"></span>'
+                f'{lh}<span style="color:#3B82F6;font-weight:600;" '
+                f'title="{_html_lib.escape(name)}">{_html_lib.escape(ticker)}</span></td>'
+                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f' title="Source: FactSet">{_fmt_tev(ev_f)}</td>'
+                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f' title="NTM EV/Revenue — Source: FactSet">{rev_cell}</td>'
+                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f' title="NTM EV/EBITDA — Source: FactSet">{ebitda_cell}</td>'
+                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f' title="NTM Revenue Growth — Source: FactSet">{gr_str}</td>'
+                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f' title="EBITDA Margin — Source: FactSet">{mgn_str}</td>'
+                f'<td style="text-align:right;font-weight:700;font-size:11px;color:{accent};'
+                f'padding:3px 4px;">{sign}{pv:.1f}%</td>'
+                f'<td style="text-align:center;padding:3px 2px;">{spark}</td>'
                 f'</tr>'
             )
+        return rows
 
-        return (
+    def _movers_table(items, accent, title, sign="", show_more_key=None):
+        """Build a movers table with optional show-more."""
+        limit = 10
+        if show_more_key and st.session_state.get(show_more_key):
+            limit = 25
+        rows = _movers_rows(items, accent, sign, limit)
+        has_more = len(items) > limit
+
+        html = (
             f'<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
             f'overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
-            f'<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;'
-            f'border-left:3px solid {accent_color};'
-            f'background:linear-gradient(90deg,{_hex_to_rgba(accent_color, 0.04)},transparent 40%);">'
-            f'<span style="font-size:12px;font-weight:800;color:{accent_color};'
+            f'<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;'
+            f'border-left:3px solid {accent};'
+            f'background:linear-gradient(90deg,{_hex_to_rgba(accent, 0.04)},transparent 40%);">'
+            f'<span style="font-size:11px;font-weight:800;color:{accent};'
             f'text-transform:uppercase;letter-spacing:0.05em;">{title}</span>'
             f'<span style="font-size:10px;color:#94A3B8;">{period_label}</span></div>'
-            f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;">'
-            f'<thead><tr>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:center;width:24px;">#</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:left;">Ticker</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:left;">Company</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:right;">TEV</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:right;">Rev x</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:right;">Change</th>'
-            f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;padding:4px 6px;'
-            f'border-bottom:1px solid #E5E7EB;text-align:center;">Price</th>'
-            f'</tr></thead>'
-            f'<tbody>{rows}</tbody></table></div>'
+            f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;'
+            f'font-variant-numeric:tabular-nums;">'
+            f'<thead><tr style="border-bottom:1px solid #E5E7EB;background:#F9FAFB;">'
         )
+        # Minimal header
+        for th_txt in ["#", "Ticker", "TEV", "Rev x", "EBITDA x", "Gr%", "Mgn%",
+                       "\u0394 Price", "Chart"]:
+            align = "center" if th_txt in ("#", "Rev x", "EBITDA x", "Chart") else (
+                "left" if th_txt == "Ticker" else "right")
+            html += (
+                f'<th style="font-size:8px;color:#9CA3AF;text-transform:uppercase;'
+                f'padding:3px 4px;text-align:{align};">{th_txt}</th>'
+            )
+        html += f'</tr></thead><tbody>{rows}</tbody></table></div>'
+        return html, has_more
 
     sorted_ret = returns.dropna().sort_values(ascending=False)
-    win_items = list(sorted_ret.head(10).items())
-    lose_items = list(sorted_ret.tail(10).sort_values(ascending=True).items())
+    win_items = list(sorted_ret.head(25).items())
+    lose_items = list(sorted_ret.tail(25).sort_values(ascending=True).items())
 
-    w_col, l_col = st.columns(2)
+    w_col, l_col = st.columns(2, gap="small")
     with w_col:
-        st.markdown(_movers_table(win_items, "#059669", "Top 10 Winners", "+"), unsafe_allow_html=True)
+        w_html, w_more = _movers_table(win_items, "#059669", "Winners", "+", "v2_show_more_w")
+        st.markdown(w_html, unsafe_allow_html=True)
+        if w_more or st.session_state.get("v2_show_more_w"):
+            if st.button("Show more winners" if not st.session_state.get("v2_show_more_w")
+                         else "Show fewer", key="v2_btn_more_w"):
+                st.session_state["v2_show_more_w"] = not st.session_state.get("v2_show_more_w", False)
+                st.rerun()
     with l_col:
-        st.markdown(_movers_table(lose_items, "#DC2626", "Top 10 Losers"), unsafe_allow_html=True)
+        l_html, l_more = _movers_table(lose_items, "#DC2626", "Losers", "", "v2_show_more_l")
+        st.markdown(l_html, unsafe_allow_html=True)
+        if l_more or st.session_state.get("v2_show_more_l"):
+            if st.button("Show more losers" if not st.session_state.get("v2_show_more_l")
+                         else "Show fewer", key="v2_btn_more_l"):
+                st.session_state["v2_show_more_l"] = not st.session_state.get("v2_show_more_l", False)
+                st.rerun()
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown(
-    f'<div style="font-size:9px;color:#B0B7C3;margin-top:8px;">'
-    f'Source: Yahoo Finance &middot; FactSet &middot; As of {as_of.strftime("%B %d, %Y")} &middot; '
-    f'Market-cap weighted segment indices</div>',
+    f'<div style="font-size:9px;color:#B0B7C3;margin-top:6px;">'
+    f'Source: Yahoo Finance (prices) &middot; FactSet (fundamentals) &middot; '
+    f'As of {date_str} &middot; Market-cap weighted segment indices</div>',
     unsafe_allow_html=True,
 )
