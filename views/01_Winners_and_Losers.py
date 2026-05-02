@@ -138,23 +138,54 @@ st.markdown(
 seg_keys = list(SEGMENT_DISPLAY.keys())
 seg_labels = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
 
+# Segment icons (small SVG/emoji per segment)
+_SEG_ICONS = {
+    "pharma":          "💊",
+    "consumer_health": "🛒",
+    "medtech":         "🩺",
+    "life_sci_tools":  "🔬",
+    "services":        "🏥",
+    "cdmo":            "⚗️",
+    "health_tech":     "💻",
+}
+
+# CSS: style each checkbox as a pill-button with colored border
+_pill_css = "<style>\n"
+for seg_key in seg_keys:
+    color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+    h = color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    _pill_css += (
+        f'div[data-testid="stCheckbox"][class*="ov_seg_{seg_key}"] {{\n'
+        f'  /* fallback — won\'t match, but CSS below will */\n'
+        f'}}\n'
+    )
+_pill_css += (
+    '/* Segment pill buttons */\n'
+    '.seg-pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }\n'
+    '.seg-pill {\n'
+    '  display: inline-flex; align-items: center; gap: 5px;\n'
+    '  padding: 6px 12px; border-radius: 8px; cursor: pointer;\n'
+    '  font-size: 12px; font-weight: 600; font-family: "DM Sans", sans-serif;\n'
+    '  transition: all 0.15s ease; user-select: none;\n'
+    '  border: 1.5px solid; white-space: nowrap;\n'
+    '}\n'
+    '.seg-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }\n'
+    '</style>\n'
+)
+st.markdown(_pill_css, unsafe_allow_html=True)
+
 seg_cols = st.columns(len(seg_keys))
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
     label = seg_labels[seg_key]
     color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+    icon = _SEG_ICONS.get(seg_key, "")
     with seg_cols[i]:
-        # Colored dot + segment name rendered as HTML above the checkbox
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:-14px;">'
-            f'<span style="display:inline-block;width:10px;height:10px;border-radius:50%;'
-            f'background:{color};flex-shrink:0;"></span>'
-            f'<span style="font-size:12px;font-weight:600;color:{color};">{label}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
+        checked = st.checkbox(
+            f"{icon} {label}", value=True, key=f"ov_seg_{seg_key}",
         )
-        if st.checkbox(label, value=True, key=f"ov_seg_{seg_key}",
-                        label_visibility="collapsed"):
+        if checked:
             selected_segments.add(seg_key)
 
 # Filter data by selected segments
@@ -314,17 +345,20 @@ filtered_companies = sorted(
     key=lambda c: c["name"],
 )
 
-# Build company list rows — color company name by segment color (no segment column)
-_comp_rows = ""
+# Build company list as a clean flowing list (dot + name · ticker)
+_comp_items = ""
 for c in filtered_companies:
-    _seg_color = SEGMENT_COLORS.get(c["segment"], "#374151")
-    _comp_rows += (
-        f'<tr>'
-        f'<td style="padding:2px 6px;font-size:11px;color:{_seg_color};font-weight:500;">'
-        f'{_html_lib.escape(c["name"])}</td>'
-        f'<td style="padding:2px 6px;font-size:11px;color:#374151;font-weight:600;">'
-        f'{_html_lib.escape(c["ticker"])}</td>'
-        f'</tr>'
+    _seg_color = SEGMENT_COLORS.get(c["segment"], "#6B7280")
+    _comp_items += (
+        f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
+        f'font-size:11px;line-height:1.4;">'
+        f'<span style="width:7px;height:7px;border-radius:50%;background:{_seg_color};'
+        f'flex-shrink:0;display:inline-block;"></span>'
+        f'<span style="color:#374151;">{_html_lib.escape(c["name"])}</span>'
+        f'<span style="color:#9CA3AF;font-size:10px;">·</span>'
+        f'<span style="color:#6B7280;font-weight:600;font-size:10px;">'
+        f'{_html_lib.escape(c["ticker"])}</span>'
+        f'</div>'
     )
 
 cards += (
@@ -335,13 +369,9 @@ cards += (
     f'<details style="margin-top:10px;">'
     f'<summary style="font-size:11px;color:#3B82F6;cursor:pointer;font-weight:600;'
     f'user-select:none;">View all {universe_count} companies</summary>'
-    f'<div style="max-height:300px;overflow-y:auto;margin-top:6px;'
+    f'<div style="max-height:280px;overflow-y:auto;margin-top:6px;'
     f'border-top:1px solid #E5E7EB;padding-top:6px;">'
-    f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;">'
-    f'<thead><tr>'
-    f'<th style="text-align:left;font-size:10px;color:#9CA3AF;padding:2px 6px;font-weight:600;">Company</th>'
-    f'<th style="text-align:left;font-size:10px;color:#9CA3AF;padding:2px 6px;font-weight:600;">Ticker</th>'
-    f'</tr></thead><tbody>{_comp_rows}</tbody></table>'
+    f'{_comp_items}'
     f'</div></details>'
     '</div>'
 )
@@ -353,57 +383,62 @@ if not returns.empty:
     down_count = total_with_data - up_count
     pct_adv = up_count / total_with_data * 100 if total_with_data else 0
 
-    # Build advancing/declining ticker lists for expandable details
-    advancing_tickers = sorted(returns[returns >= 0].index.tolist())
-    declining_tickers = sorted(returns[returns < 0].index.tolist())
+    # Build advancing/declining lists sorted by return (most → least)
+    adv_series = returns[returns >= 0].sort_values(ascending=False)
+    dec_series = returns[returns < 0].sort_values(ascending=True)
 
-    _adv_items = ""
-    for t in advancing_tickers:
-        co = ticker_to_co.get(t, {})
-        seg_key = co.get("segment", "")
-        seg_color = SEGMENT_COLORS.get(seg_key, "#374151")
-        name = str(co.get("name") or t)
-        ret_val = returns.get(t, 0)
-        _adv_items += (
-            f'<div style="display:flex;justify-content:space-between;padding:1px 4px;font-size:10px;">'
-            f'<span style="color:{seg_color};">{_html_lib.escape(name)}</span>'
-            f'<span style="color:{GREEN};font-weight:600;">+{ret_val:.1f}%</span></div>'
-        )
+    def _build_return_list(series, color, sign_prefix=""):
+        items = ""
+        for t, ret_val in series.items():
+            co = ticker_to_co.get(t, {})
+            seg_key = co.get("segment", "")
+            seg_color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+            name = str(co.get("name") or t)
+            short = (name[:22] + "…") if len(name) > 23 else name
+            items += (
+                f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
+                f'font-size:10px;line-height:1.3;">'
+                f'<span style="width:6px;height:6px;border-radius:50%;background:{seg_color};'
+                f'flex-shrink:0;"></span>'
+                f'<span style="color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;'
+                f'white-space:nowrap;">{_html_lib.escape(short)}</span>'
+                f'<span style="color:{color};font-weight:700;white-space:nowrap;'
+                f'font-variant-numeric:tabular-nums;">{sign_prefix}{ret_val:.1f}%</span>'
+                f'</div>'
+            )
+        return items
 
-    _dec_items = ""
-    for t in declining_tickers:
-        co = ticker_to_co.get(t, {})
-        seg_key = co.get("segment", "")
-        seg_color = SEGMENT_COLORS.get(seg_key, "#374151")
-        name = str(co.get("name") or t)
-        ret_val = returns.get(t, 0)
-        _dec_items += (
-            f'<div style="display:flex;justify-content:space-between;padding:1px 4px;font-size:10px;">'
-            f'<span style="color:{seg_color};">{_html_lib.escape(name)}</span>'
-            f'<span style="color:{RED};font-weight:600;">{ret_val:.1f}%</span></div>'
-        )
+    _adv_items = _build_return_list(adv_series, GREEN, "+")
+    _dec_items = _build_return_list(dec_series, RED, "")
 
     cards += (
         '<div class="wl-stat-card">'
         '<div class="wl-stat-label">Advancing vs. Declining</div>'
-        f'<div class="wl-stat-value">{pct_adv:.0f}% Advancing</div>'
-        f'<div class="wl-stat-sub">'
-        f'<span style="color:{GREEN};font-weight:700;">{up_count}</span> up &nbsp; '
-        f'<span style="color:{RED};font-weight:700;">{down_count}</span> down'
+        f'<div class="wl-stat-value">{pct_adv:.0f}% <span style="font-size:16px;'
+        f'font-weight:500;color:#6B7280;">advancing</span></div>'
+        f'<div style="display:flex;gap:12px;margin-top:6px;">'
+        f'<span style="font-size:12px;"><span style="color:{GREEN};font-weight:700;">'
+        f'▲ {up_count}</span> <span style="color:#9CA3AF;">up</span></span>'
+        f'<span style="font-size:12px;"><span style="color:{RED};font-weight:700;">'
+        f'▼ {down_count}</span> <span style="color:#9CA3AF;">down</span></span>'
         f'</div>'
-        f'<div style="display:flex;gap:8px;margin-top:8px;">'
-        # Advancing list
-        f'<details style="flex:1;">'
-        f'<summary style="font-size:10px;color:{GREEN};cursor:pointer;font-weight:600;'
-        f'user-select:none;">View {up_count} advancing</summary>'
-        f'<div style="max-height:200px;overflow-y:auto;margin-top:4px;'
-        f'border-top:1px solid #E5E7EB;padding-top:4px;">{_adv_items}</div></details>'
-        # Declining list
-        f'<details style="flex:1;">'
-        f'<summary style="font-size:10px;color:{RED};cursor:pointer;font-weight:600;'
-        f'user-select:none;">View {down_count} declining</summary>'
-        f'<div style="max-height:200px;overflow-y:auto;margin-top:4px;'
-        f'border-top:1px solid #E5E7EB;padding-top:4px;">{_dec_items}</div></details>'
+        f'<div style="display:flex;gap:10px;margin-top:10px;">'
+        # Advancing column
+        f'<div style="flex:1;">'
+        f'<details>'
+        f'<summary style="font-size:10px;color:{GREEN};cursor:pointer;font-weight:700;'
+        f'user-select:none;letter-spacing:0.03em;">▲ {up_count} advancing</summary>'
+        f'<div style="max-height:220px;overflow-y:auto;margin-top:4px;'
+        f'padding-top:4px;border-top:1px solid rgba(5,150,105,0.15);">{_adv_items}</div>'
+        f'</details></div>'
+        # Declining column
+        f'<div style="flex:1;">'
+        f'<details>'
+        f'<summary style="font-size:10px;color:{RED};cursor:pointer;font-weight:700;'
+        f'user-select:none;letter-spacing:0.03em;">▼ {down_count} declining</summary>'
+        f'<div style="max-height:220px;overflow-y:auto;margin-top:4px;'
+        f'padding-top:4px;border-top:1px solid rgba(220,38,38,0.15);">{_dec_items}</div>'
+        f'</details></div>'
         f'</div>'
         '</div>'
     )
