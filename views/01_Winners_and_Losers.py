@@ -41,6 +41,10 @@ st.markdown("""
 .main .block-container { background-color: #FAFBFC !important; color: #1A1A2E !important; }
 h1,h2,h3,h4,h5,h6 { color: #111827 !important; }
 
+/* Hide default details triangle — use › text arrow instead */
+details summary { list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+
 /* Stat cards */
 .wl-stat-grid { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
 .wl-stat-card {
@@ -138,7 +142,7 @@ st.markdown(
 seg_keys = list(SEGMENT_DISPLAY.keys())
 seg_labels = {k: SEGMENT_SHORT.get(k, v) for k, v in SEGMENT_DISPLAY.items()}
 
-# Segment icons (small SVG/emoji per segment)
+# Segment icons (emoji after the segment name)
 _SEG_ICONS = {
     "pharma":          "💊",
     "consumer_health": "🛒",
@@ -149,41 +153,43 @@ _SEG_ICONS = {
     "health_tech":     "💻",
 }
 
-# CSS: style each checkbox as a pill-button with colored border
+def _hex_to_rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+# CSS: style each checkbox container as a colored pill box
 _pill_css = "<style>\n"
 for seg_key in seg_keys:
     color = SEGMENT_COLORS.get(seg_key, "#6B7280")
-    h = color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    bg = _hex_to_rgba(color, 0.08)
+    border = _hex_to_rgba(color, 0.35)
+    aria = seg_labels[seg_key]
     _pill_css += (
-        f'div[data-testid="stCheckbox"][class*="ov_seg_{seg_key}"] {{\n'
-        f'  /* fallback — won\'t match, but CSS below will */\n'
+        f'/* {aria} pill */\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]) {{\n'
+        f'  background: {bg}; border: 1.5px solid {border}; border-radius: 8px;\n'
+        f'  padding: 4px 8px; transition: all 0.15s ease;\n'
+        f'}}\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]) label p {{\n'
+        f'  color: {color} !important; font-weight: 600 !important; font-size: 12px !important;\n'
+        f'}}\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]):hover {{\n'
+        f'  background: {_hex_to_rgba(color, 0.14)}; border-color: {_hex_to_rgba(color, 0.5)};\n'
+        f'  transform: translateY(-1px); box-shadow: 0 2px 6px {_hex_to_rgba(color, 0.12)};\n'
         f'}}\n'
     )
-_pill_css += (
-    '/* Segment pill buttons */\n'
-    '.seg-pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }\n'
-    '.seg-pill {\n'
-    '  display: inline-flex; align-items: center; gap: 5px;\n'
-    '  padding: 6px 12px; border-radius: 8px; cursor: pointer;\n'
-    '  font-size: 12px; font-weight: 600; font-family: "DM Sans", sans-serif;\n'
-    '  transition: all 0.15s ease; user-select: none;\n'
-    '  border: 1.5px solid; white-space: nowrap;\n'
-    '}\n'
-    '.seg-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }\n'
-    '</style>\n'
-)
+_pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
 
 seg_cols = st.columns(len(seg_keys))
 selected_segments = set()
 for i, seg_key in enumerate(seg_keys):
     label = seg_labels[seg_key]
-    color = SEGMENT_COLORS.get(seg_key, "#6B7280")
     icon = _SEG_ICONS.get(seg_key, "")
     with seg_cols[i]:
         checked = st.checkbox(
-            f"{icon} {label}", value=True, key=f"ov_seg_{seg_key}",
+            f"{label} {icon}", value=True, key=f"ov_seg_{seg_key}",
         )
         if checked:
             selected_segments.add(seg_key)
@@ -345,10 +351,12 @@ filtered_companies = sorted(
     key=lambda c: c["name"],
 )
 
-# Build company list as a clean flowing list (dot + name · ticker)
+# Build company list as a clean flowing list (dot + name · ticker + logo)
 _comp_items = ""
 for c in filtered_companies:
     _seg_color = SEGMENT_COLORS.get(c["segment"], "#6B7280")
+    _logo = logo_img_tag(c["ticker"], size=13)
+    _logo_html = f'{_logo}&nbsp;' if _logo else ''
     _comp_items += (
         f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
         f'font-size:11px;line-height:1.4;">'
@@ -356,8 +364,10 @@ for c in filtered_companies:
         f'flex-shrink:0;display:inline-block;"></span>'
         f'<span style="color:#374151;">{_html_lib.escape(c["name"])}</span>'
         f'<span style="color:#9CA3AF;font-size:10px;">·</span>'
+        f'<span style="display:inline-flex;align-items:center;gap:3px;">'
+        f'{_logo_html}'
         f'<span style="color:#6B7280;font-weight:600;font-size:10px;">'
-        f'{_html_lib.escape(c["ticker"])}</span>'
+        f'{_html_lib.escape(c["ticker"])}</span></span>'
         f'</div>'
     )
 
@@ -394,16 +404,18 @@ if not returns.empty:
             seg_key = co.get("segment", "")
             seg_color = SEGMENT_COLORS.get(seg_key, "#6B7280")
             name = str(co.get("name") or t)
-            short = (name[:22] + "…") if len(name) > 23 else name
+            short = (name[:24] + "…") if len(name) > 25 else name
+            _logo = logo_img_tag(t, size=12)
+            _lh = f'{_logo}&nbsp;' if _logo else ''
             items += (
                 f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
-                f'font-size:10px;line-height:1.3;">'
+                f'font-size:10px;line-height:1.4;">'
                 f'<span style="width:6px;height:6px;border-radius:50%;background:{seg_color};'
                 f'flex-shrink:0;"></span>'
                 f'<span style="color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;'
-                f'white-space:nowrap;">{_html_lib.escape(short)}</span>'
+                f'white-space:nowrap;">{_lh}{_html_lib.escape(short)}</span>'
                 f'<span style="color:{color};font-weight:700;white-space:nowrap;'
-                f'font-variant-numeric:tabular-nums;">{sign_prefix}{ret_val:.1f}%</span>'
+                f'font-variant-numeric:tabular-nums;">{sign_prefix}{ret_val:.0f}%</span>'
                 f'</div>'
             )
         return items
@@ -411,34 +423,33 @@ if not returns.empty:
     _adv_items = _build_return_list(adv_series, GREEN, "+")
     _dec_items = _build_return_list(dec_series, RED, "")
 
+    # Use a named details group so only one can be open at a time (HTML exclusive)
     cards += (
         '<div class="wl-stat-card">'
-        '<div class="wl-stat-label">Advancing vs. Declining</div>'
+        '<div class="wl-stat-label">% Advancing vs. Declining</div>'
         f'<div class="wl-stat-value">{pct_adv:.0f}% <span style="font-size:16px;'
         f'font-weight:500;color:#6B7280;">advancing</span></div>'
-        f'<div style="display:flex;gap:12px;margin-top:6px;">'
-        f'<span style="font-size:12px;"><span style="color:{GREEN};font-weight:700;">'
-        f'▲ {up_count}</span> <span style="color:#9CA3AF;">up</span></span>'
-        f'<span style="font-size:12px;"><span style="color:{RED};font-weight:700;">'
-        f'▼ {down_count}</span> <span style="color:#9CA3AF;">down</span></span>'
+        f'<div class="wl-stat-sub">'
+        f'<span style="color:{GREEN};font-weight:700;">{up_count}</span> up &nbsp; '
+        f'<span style="color:{RED};font-weight:700;">{down_count}</span> down'
         f'</div>'
-        f'<div style="display:flex;gap:10px;margin-top:10px;">'
-        # Advancing column
-        f'<div style="flex:1;">'
-        f'<details>'
-        f'<summary style="font-size:10px;color:{GREEN};cursor:pointer;font-weight:700;'
-        f'user-select:none;letter-spacing:0.03em;">▲ {up_count} advancing</summary>'
-        f'<div style="max-height:220px;overflow-y:auto;margin-top:4px;'
-        f'padding-top:4px;border-top:1px solid rgba(5,150,105,0.15);">{_adv_items}</div>'
-        f'</details></div>'
-        # Declining column
-        f'<div style="flex:1;">'
-        f'<details>'
-        f'<summary style="font-size:10px;color:{RED};cursor:pointer;font-weight:700;'
-        f'user-select:none;letter-spacing:0.03em;">▼ {down_count} declining</summary>'
-        f'<div style="max-height:220px;overflow-y:auto;margin-top:4px;'
-        f'padding-top:4px;border-top:1px solid rgba(220,38,38,0.15);">{_dec_items}</div>'
-        f'</details></div>'
+        f'<div style="margin-top:8px;">'
+        # Advancing list
+        f'<details name="adv_dec" style="margin-bottom:4px;">'
+        f'<summary style="font-size:11px;color:{GREEN};cursor:pointer;font-weight:600;'
+        f'user-select:none;list-style:none;">'
+        f'View {up_count} advancing ›</summary>'
+        f'<div style="max-height:240px;overflow-y:auto;margin-top:4px;'
+        f'padding-top:4px;border-top:1px solid #E5E7EB;">{_adv_items}</div>'
+        f'</details>'
+        # Declining list
+        f'<details name="adv_dec">'
+        f'<summary style="font-size:11px;color:{RED};cursor:pointer;font-weight:600;'
+        f'user-select:none;list-style:none;">'
+        f'View {down_count} declining ›</summary>'
+        f'<div style="max-height:240px;overflow-y:auto;margin-top:4px;'
+        f'padding-top:4px;border-top:1px solid #E5E7EB;">{_dec_items}</div>'
+        f'</details>'
         f'</div>'
         '</div>'
     )
