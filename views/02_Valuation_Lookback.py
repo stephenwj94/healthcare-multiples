@@ -141,6 +141,7 @@ CATEGORY_COLORS_DISPLAY = {
     "Pharma":                              SEGMENT_COLORS.get("pharma", "#29335C"),
     "Consumer Health":                     SEGMENT_COLORS.get("consumer_health", "#7CEA9C"),
     "MedTech":                             SEGMENT_COLORS.get("medtech", "#F3A712"),
+    "LST / Dx":                            SEGMENT_COLORS.get("life_sci_tools", "#DB2B39"),
     "Life Sci Tools / Dx / Bioprocessing": SEGMENT_COLORS.get("life_sci_tools", "#DB2B39"),
     "LST / Dx / Bioprocessing":            SEGMENT_COLORS.get("life_sci_tools", "#DB2B39"),
     "Asset-Light Services":                SEGMENT_COLORS.get("services", "#0D9488"),
@@ -156,6 +157,7 @@ CATEGORY_PILLS = {
     "Pharma":                              ("#ECEEF6", "#29335C"),
     "Consumer Health":                     ("#EDFAF3", "#1D6A40"),
     "MedTech":                             ("#FEF9E7", "#A87000"),
+    "LST / Dx":                            ("#FDEDEF", "#B01E29"),
     "Life Sci Tools / Dx / Bioprocessing": ("#FDEDEF", "#B01E29"),
     "LST / Dx / Bioprocessing":            ("#FDEDEF", "#B01E29"),
     "Asset-Light Services":                ("#E6FFFA", "#0F766E"),
@@ -1036,9 +1038,9 @@ _SEG_META = [
     {"label": "Pharma",          "short": "Pharma",  "color": SEGMENT_COLORS.get("pharma", "#1D4ED8"),        "bg": "#E9EFFC", "border": SEGMENT_COLORS.get("pharma", "#1D4ED8")},
     {"label": "Consumer Health", "short": "CH",      "color": SEGMENT_COLORS.get("consumer_health", "#047857"), "bg": "#E6F4EE", "border": SEGMENT_COLORS.get("consumer_health", "#047857")},
     {"label": "MedTech",         "short": "MedTech", "color": SEGMENT_COLORS.get("medtech", "#B91C1C"),       "bg": "#FCEAEA", "border": SEGMENT_COLORS.get("medtech", "#B91C1C")},
-    {"label": "Life Sci Tools",  "short": "LST",     "color": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9"), "bg": "#F1EAFB", "border": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9")},
-    {"label": "Services",        "short": "Svcs",    "color": SEGMENT_COLORS.get("services", "#B45309"),      "bg": "#FEF3E2", "border": SEGMENT_COLORS.get("services", "#B45309")},
-    {"label": "CDMOs",           "short": "CDMO",    "color": SEGMENT_COLORS.get("cdmo", "#C2410C"),          "bg": "#FDECE0", "border": SEGMENT_COLORS.get("cdmo", "#C2410C")},
+    {"label": "LST / Dx",              "short": "LST",     "color": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9"), "bg": "#F1EAFB", "border": SEGMENT_COLORS.get("life_sci_tools", "#6D28D9")},
+    {"label": "Asset-Light Services", "short": "A-Light", "color": SEGMENT_COLORS.get("services", "#B45309"),      "bg": "#FEF3E2", "border": SEGMENT_COLORS.get("services", "#B45309")},
+    {"label": "Asset-Heavy Services", "short": "A-Heavy", "color": SEGMENT_COLORS.get("cdmo", "#C2410C"),          "bg": "#FDECE0", "border": SEGMENT_COLORS.get("cdmo", "#C2410C")},
     {"label": "Health Tech",     "short": "HCIT",    "color": SEGMENT_COLORS.get("health_tech", "#0E7490"),   "bg": "#E2F1F5", "border": SEGMENT_COLORS.get("health_tech", "#0E7490")},
 ]
 
@@ -1171,13 +1173,16 @@ def _build_movers_table(df, y_col, x_col, ascending, top_n=None):
     has_growth_then = df_s[f"{x_col}_then"].notna().any()
 
     _SEG_COLORS_LOCAL = {
-        "Pharma":          SEGMENT_COLORS.get("pharma", "#2563EB"),
-        "Consumer Health": SEGMENT_COLORS.get("consumer_health", "#059669"),
-        "MedTech":         SEGMENT_COLORS.get("medtech", "#DC2626"),
-        "Life Sci Tools":  SEGMENT_COLORS.get("life_sci_tools", "#7C3AED"),
-        "Services":        SEGMENT_COLORS.get("services", "#F59E0B"),
-        "CDMOs":           SEGMENT_COLORS.get("cdmo", "#EA580C"),
-        "Health Tech":     SEGMENT_COLORS.get("health_tech", "#0891B2"),
+        "Pharma":                SEGMENT_COLORS.get("pharma", "#2563EB"),
+        "Consumer Health":       SEGMENT_COLORS.get("consumer_health", "#059669"),
+        "MedTech":               SEGMENT_COLORS.get("medtech", "#DC2626"),
+        "LST / Dx":              SEGMENT_COLORS.get("life_sci_tools", "#7C3AED"),
+        "Life Sci Tools":        SEGMENT_COLORS.get("life_sci_tools", "#7C3AED"),
+        "Asset-Light Services":  SEGMENT_COLORS.get("services", "#F59E0B"),
+        "Services":              SEGMENT_COLORS.get("services", "#F59E0B"),
+        "Asset-Heavy Services":  SEGMENT_COLORS.get("cdmo", "#EA580C"),
+        "CDMOs":                 SEGMENT_COLORS.get("cdmo", "#EA580C"),
+        "Health Tech":           SEGMENT_COLORS.get("health_tech", "#0891B2"),
     }
     _TH_S = (
         "background:#F9FAFB;color:#6B7280;font-size:9px;text-transform:uppercase;"

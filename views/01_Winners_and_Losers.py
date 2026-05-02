@@ -158,23 +158,37 @@ def _hex_to_rgba(hex_color, alpha):
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
-# CSS: style each checkbox container as a colored pill box
+# CSS: style each checkbox container as a colored pill box with proper alignment
 _pill_css = "<style>\n"
+# Ensure all checkbox columns are equal width and aligned
+_pill_css += (
+    '/* Equal-width segment columns */\n'
+    'div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {\n'
+    '  flex: 1 1 0 !important; min-width: 0 !important;\n'
+    '}\n'
+    '/* Vertically center checkbox label with the box */\n'
+    'div[data-testid="stCheckbox"] label {\n'
+    '  display: flex !important; align-items: center !important;\n'
+    '}\n'
+    'div[data-testid="stCheckbox"] label p {\n'
+    '  margin: 0 !important; line-height: 1 !important;\n'
+    '}\n'
+)
 for seg_key in seg_keys:
     color = SEGMENT_COLORS.get(seg_key, "#6B7280")
     bg = _hex_to_rgba(color, 0.08)
     border = _hex_to_rgba(color, 0.35)
-    aria = seg_labels[seg_key]
+    aria = f"{seg_labels[seg_key]} {_SEG_ICONS.get(seg_key, '')}"
     _pill_css += (
-        f'/* {aria} pill */\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]) {{\n'
+        f'/* {seg_labels[seg_key]} pill */\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) {{\n'
         f'  background: {bg}; border: 1.5px solid {border}; border-radius: 8px;\n'
         f'  padding: 4px 8px; transition: all 0.15s ease;\n'
         f'}}\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]) label p {{\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]) label p {{\n'
         f'  color: {color} !important; font-weight: 600 !important; font-size: 12px !important;\n'
         f'}}\n'
-        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria} {_SEG_ICONS.get(seg_key, "")}"]):hover {{\n'
+        f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]):hover {{\n'
         f'  background: {_hex_to_rgba(color, 0.14)}; border-color: {_hex_to_rgba(color, 0.5)};\n'
         f'  transform: translateY(-1px); box-shadow: 0 2px 6px {_hex_to_rgba(color, 0.12)};\n'
         f'}}\n'
@@ -454,72 +468,111 @@ if not returns.empty:
         '</div>'
     )
 
-    # Median change
+    # Median change by segment
     median_chg = float(returns.median())
     med_color = GREEN if median_chg >= 0 else RED
     med_sign = "+" if median_chg >= 0 else ""
+
+    # Build per-segment median rows
+    _seg_medians = ""
+    ticker_seg_map = {d["ticker"]: d["segment"] for d in filtered_data if d.get("ticker")}
+    for sk in seg_keys:
+        if sk not in selected_segments:
+            continue
+        seg_ticks = [t for t, s in ticker_seg_map.items() if s == sk and t in returns.index]
+        if not seg_ticks:
+            continue
+        seg_med = float(returns[seg_ticks].median())
+        sc = SEGMENT_COLORS.get(sk, "#6B7280")
+        sn = SEGMENT_SHORT.get(sk, sk)
+        s_sign = "+" if seg_med >= 0 else ""
+        s_color = GREEN if seg_med >= 0 else RED
+        _seg_medians += (
+            f'<div style="display:flex;align-items:center;justify-content:space-between;'
+            f'padding:2px 0;font-size:11px;">'
+            f'<span style="display:flex;align-items:center;gap:5px;">'
+            f'<span style="width:7px;height:7px;border-radius:50%;background:{sc};'
+            f'display:inline-block;"></span>'
+            f'<span style="color:#374151;">{_html_lib.escape(sn)}</span></span>'
+            f'<span style="color:{s_color};font-weight:700;font-variant-numeric:tabular-nums;">'
+            f'{s_sign}{seg_med:.1f}%</span>'
+            f'</div>'
+        )
+
     cards += (
         '<div class="wl-stat-card">'
         f'<div class="wl-stat-label">Median {selected_period} Change</div>'
         f'<div class="wl-stat-value" style="color:{med_color};">{med_sign}{median_chg:.1f}%</div>'
-        f'<div class="wl-stat-sub">{"Bullish" if median_chg >= 0 else "Bearish"} sentiment</div>'
+        f'<div class="wl-stat-sub" style="margin-bottom:6px;">Overall median</div>'
+        f'{_seg_medians}'
         '</div>'
     )
 
-    # Top 3 / Bottom 3 performers
+    # Top / Bottom performers
     sorted_ret = returns.sort_values(ascending=False)
-    top3 = list(sorted_ret.head(3).items())
-    bot3 = list(sorted_ret.tail(3).sort_values(ascending=True).items())
+    top_show = 5   # show 5 initially
+    top_all = 15   # expandable to 15
+    top_items = list(sorted_ret.head(top_all).items())
+    bot_items = list(sorted_ret.tail(top_all).sort_values(ascending=True).items())
 
-    # Best Performer card (top 3)
-    top3_html = ""
-    for ticker, pct in top3:
+    def _perf_row(ticker, pct, color, sign=""):
         try:
             pct_f = float(pct)
             if np.isnan(pct_f):
-                continue
-            pct_str = f"+{pct_f:.0f}%"
+                return ""
+            pct_str = f"{sign}{pct_f:.0f}%"
         except (TypeError, ValueError):
-            continue
-        logo = logo_img_tag(ticker, size=14)
+            return ""
+        co = ticker_to_co.get(ticker, {})
+        seg_key = co.get("segment", "")
+        seg_color = SEGMENT_COLORS.get(seg_key, "#6B7280")
+        logo = logo_img_tag(ticker, size=13)
         logo_h = f'{logo}&nbsp;' if logo else ''
-        top3_html += (
-            f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
+        return (
+            f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
+            f'font-size:11px;line-height:1.4;">'
+            f'<span style="width:6px;height:6px;border-radius:50%;background:{seg_color};'
+            f'flex-shrink:0;"></span>'
             f'{logo_h}'
-            f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
-            f'<span style="color:{GREEN};font-weight:700;font-size:13px;margin-left:auto;">{pct_str}</span>'
+            f'<span style="font-weight:600;color:#111827;">{_html_lib.escape(ticker)}</span>'
+            f'<span style="color:{color};font-weight:700;margin-left:auto;'
+            f'font-variant-numeric:tabular-nums;">{pct_str}</span>'
             f'</div>'
+        )
+
+    # Best Performers card
+    top_visible = "".join(_perf_row(t, p, GREEN, "+") for t, p in top_items[:top_show])
+    top_extra = "".join(_perf_row(t, p, GREEN, "+") for t, p in top_items[top_show:])
+    top_expand = ""
+    if top_extra:
+        top_expand = (
+            f'<details name="perf_expand" style="margin-top:2px;">'
+            f'<summary style="font-size:10px;color:#3B82F6;cursor:pointer;font-weight:600;'
+            f'user-select:none;list-style:none;">View more ›</summary>'
+            f'<div style="margin-top:2px;">{top_extra}</div></details>'
         )
     cards += (
         '<div class="wl-stat-card">'
-        '<div class="wl-stat-label">Best Performer</div>'
-        f'{top3_html}'
+        '<div class="wl-stat-label">Best Performers</div>'
+        f'{top_visible}{top_expand}'
         '</div>'
     )
 
-    # Worst Performer card (bottom 3)
-    bot3_html = ""
-    for ticker, pct in bot3:
-        try:
-            pct_f = float(pct)
-            if np.isnan(pct_f):
-                continue
-            pct_str = f"{pct_f:.0f}%"
-        except (TypeError, ValueError):
-            continue
-        logo = logo_img_tag(ticker, size=14)
-        logo_h = f'{logo}&nbsp;' if logo else ''
-        bot3_html += (
-            f'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">'
-            f'{logo_h}'
-            f'<span style="font-weight:600;color:#111827;font-size:12px;">{ticker}</span>'
-            f'<span style="color:{RED};font-weight:700;font-size:13px;margin-left:auto;">{pct_str}</span>'
-            f'</div>'
+    # Worst Performers card
+    bot_visible = "".join(_perf_row(t, p, RED) for t, p in bot_items[:top_show])
+    bot_extra = "".join(_perf_row(t, p, RED) for t, p in bot_items[top_show:])
+    bot_expand = ""
+    if bot_extra:
+        bot_expand = (
+            f'<details name="perf_expand" style="margin-top:2px;">'
+            f'<summary style="font-size:10px;color:#3B82F6;cursor:pointer;font-weight:600;'
+            f'user-select:none;list-style:none;">View more ›</summary>'
+            f'<div style="margin-top:2px;">{bot_extra}</div></details>'
         )
     cards += (
         '<div class="wl-stat-card">'
-        '<div class="wl-stat-label">Worst Performer</div>'
-        f'{bot3_html}'
+        '<div class="wl-stat-label">Worst Performers</div>'
+        f'{bot_visible}{bot_expand}'
         '</div>'
     )
 
@@ -788,8 +841,14 @@ else:
         except (TypeError, ValueError):
             gr_str = "\u2014"
 
-        chg_color = "#059669" if pct >= 0 else "#DC2626"
-        chg_text = f"+{pct:.1f}%" if pct >= 0 else f"{pct:.1f}%"
+        try:
+            pct_val = float(pct)
+            if np.isnan(pct_val):
+                return ""
+        except (TypeError, ValueError):
+            return ""
+        chg_color = "#059669" if pct_val >= 0 else "#DC2626"
+        chg_text = f"+{pct_val:.1f}%" if pct_val >= 0 else f"{pct_val:.1f}%"
 
         rank_col = "#111827" if rank <= 3 else "#64748B"
         rank_fw = "700" if rank <= 3 else "500"
@@ -822,7 +881,12 @@ else:
         '</div></td></tr>'
     )
     for i, (ticker, pct) in enumerate(winners, 1):
-        tbody += _make_row(i, ticker, pct, "winners")
+        try:
+            if np.isnan(float(pct)):
+                continue
+        except (TypeError, ValueError):
+            continue
+        tbody += _make_row(i, ticker, float(pct), "winners")
 
     # Losers header
     if losers:
@@ -837,7 +901,12 @@ else:
             '</div></td></tr>'
         )
         for i, (ticker, pct) in enumerate(losers, 1):
-            tbody += _make_row(i, ticker, pct, "losers")
+            try:
+                if np.isnan(float(pct)):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            tbody += _make_row(i, ticker, float(pct), "losers")
 
     tbody += "</tbody>"
 
