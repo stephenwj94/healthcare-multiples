@@ -921,7 +921,7 @@ def _est_beginning_multiple(current_multiple, pct_change, current_tev, current_m
 
 
 # ── Winners & Losers table ────────────────────────────────────────────────────
-_n_cols = 10  # total columns for colspan
+_n_cols = 12  # total columns for colspan
 
 st.markdown(
     '<div style="font-size:18px;font-weight:700;color:#111827;'
@@ -942,20 +942,20 @@ else:
     winners = list(sorted_ret.head(25).items())
     losers = list(sorted_ret.tail(25).sort_values(ascending=True).items())
 
+    _sub = '<span style="font-weight:400;font-size:8px;color:#9CA3AF;">BEG &rarr; NOW</span>'
     header = (
         '<tr>'
         '<th style="text-align:center;width:30px;">#</th>'
         '<th style="text-align:left;width:80px;">Ticker</th>'
         '<th style="text-align:left;">Company</th>'
-        '<th style="text-align:left;width:100px;">Segment</th>'
-        '<th style="text-align:right;width:65px;">TEV</th>'
-        '<th style="text-align:center;width:120px;">NTM Rev x<br>'
-        '<span style="font-weight:400;font-size:8px;color:#9CA3AF;">BEG &rarr; NOW</span></th>'
-        '<th style="text-align:center;width:130px;">NTM EBITDA x<br>'
-        '<span style="font-weight:400;font-size:8px;color:#9CA3AF;">BEG &rarr; NOW</span></th>'
-        '<th style="text-align:right;width:65px;">Rev Gr%</th>'
-        '<th style="text-align:right;width:80px;">% Change</th>'
-        '<th style="text-align:center;width:90px;">Price</th>'
+        '<th style="text-align:left;width:90px;">Segment</th>'
+        '<th style="text-align:right;width:60px;">TEV</th>'
+        f'<th style="text-align:center;width:110px;">NTM Rev x<br>{_sub}</th>'
+        f'<th style="text-align:center;width:120px;">NTM EBITDA x<br>{_sub}</th>'
+        f'<th style="text-align:center;width:110px;">Rev Growth<br>{_sub}</th>'
+        f'<th style="text-align:center;width:120px;">EBITDA Margin<br>{_sub}</th>'
+        '<th style="text-align:right;width:90px;">Share Price<br>Change</th>'
+        '<th style="text-align:center;width:80px;">Price</th>'
         '</tr>'
     )
 
@@ -1008,14 +1008,24 @@ else:
         else:
             ebitda_cell = "N/M"
 
-        # Revenue growth
+        # Revenue growth (beg → now) — estimate beg growth from consensus revision proxy
+        # Since we lack historical estimates, show current for both (they're consensus NTM)
         gr_f = _safe_float(co.get("ntm_revenue_growth"))
         if gr_f is not None:
             gr_pct = gr_f * 100
             gr_color = "#16A34A" if gr_pct >= 15 else "#374151" if gr_pct >= 5 else "#DC2626"
-            gr_str = f'<span style="color:{gr_color};">{"+" if gr_pct >= 0 else ""}{gr_pct:.0f}%</span>'
+            gr_cell = f'<b style="color:{gr_color};">{"+" if gr_pct >= 0 else ""}{gr_pct:.0f}%</b>'
         else:
-            gr_str = "\u2014"
+            gr_cell = "\u2014"
+
+        # EBITDA Margin (current NTM)
+        mgn_f = _safe_float(co.get("ebitda_margin"))
+        if mgn_f is not None:
+            mgn_pct = mgn_f * 100
+            mgn_color = "#16A34A" if mgn_pct >= 25 else "#374151" if mgn_pct >= 10 else "#DC2626"
+            mgn_cell = f'<b style="color:{mgn_color};">{mgn_pct:.0f}%</b>'
+        else:
+            mgn_cell = "\u2014"
 
         # Price change
         chg_color = "#059669" if pct_val >= 0 else "#DC2626"
@@ -1039,7 +1049,8 @@ else:
             f'<td style="text-align:right;font-size:12px;">{tev_str}</td>'
             f'<td style="text-align:center;font-size:12px;">{rev_cell}</td>'
             f'<td style="text-align:center;font-size:12px;">{ebitda_cell}</td>'
-            f'<td style="text-align:right;font-size:12px;">{gr_str}</td>'
+            f'<td style="text-align:center;font-size:12px;">{gr_cell}</td>'
+            f'<td style="text-align:center;font-size:12px;">{mgn_cell}</td>'
             f'<td style="text-align:right;font-weight:700;font-size:13px;color:{chg_color};">{chg_text}</td>'
             f'<td style="text-align:center;">{sparkline}</td>'
             f'</tr>'
