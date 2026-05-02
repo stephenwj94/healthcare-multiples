@@ -221,23 +221,7 @@ for seg_key in seg_keys:
 _pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
 
-# Segment columns (equal) + narrow period column
-_n_seg = len(seg_keys)
-_col_spec = [1] * _n_seg + [0.7]  # period column narrower
-_all_cols = st.columns(_col_spec)
-
-selected_segments = set()
-for i, seg_key in enumerate(seg_keys):
-    cb_label = _CB_LABELS.get(seg_key, seg_labels[seg_key])
-    icon = _SEG_ICONS.get(seg_key, "")
-    with _all_cols[i]:
-        checked = st.checkbox(
-            f"{cb_label} {icon}", value=True, key=f"ov_seg_{seg_key}",
-        )
-        if checked:
-            selected_segments.add(seg_key)
-
-# Time period selector in the last column
+# Time period selector on top
 _PERIOD_OPTIONS = ["1W", "1M", "3M", "6M", "12M", "YTD", "3Y", "5Y"]
 _PERIOD_LABELS = {
     "1W": "Last Week", "1M": "Last Month", "3M": "Last 3 Months",
@@ -245,12 +229,28 @@ _PERIOD_LABELS = {
     "3Y": "Last 3 Years", "5Y": "Last 5 Years",
 }
 
-with _all_cols[-1]:
+_period_col, _ = st.columns([2, 8])
+with _period_col:
     selected_period = st.selectbox(
-        "Period", _PERIOD_OPTIONS, index=0,
+        "Time Period", _PERIOD_OPTIONS, index=0,
         key="wl_period_select",
     )
 period_label = _PERIOD_LABELS[selected_period]
+
+# Segment checkbox pills — equally spaced across full width
+_n_seg = len(seg_keys)
+_seg_cols = st.columns([1] * _n_seg)
+
+selected_segments = set()
+for i, seg_key in enumerate(seg_keys):
+    cb_label = _CB_LABELS.get(seg_key, seg_labels[seg_key])
+    icon = _SEG_ICONS.get(seg_key, "")
+    with _seg_cols[i]:
+        checked = st.checkbox(
+            f"{cb_label} {icon}", value=True, key=f"ov_seg_{seg_key}",
+        )
+        if checked:
+            selected_segments.add(seg_key)
 
 # Filter data by selected segments
 filtered_data = [d for d in all_data if d.get("segment") in selected_segments]
@@ -532,21 +532,21 @@ if not returns.empty:
         bar_pct = min(abs(seg_med) / _max_abs * 100, 100)
         bar_color = _hex_to_rgba(sc, 0.25)
         _seg_medians += (
-            f'<div style="padding:6px 0;">'
+            f'<div style="padding:3px 0;">'
             f'<div style="display:flex;align-items:center;justify-content:space-between;'
-            f'margin-bottom:3px;">'
-            f'<span style="display:flex;align-items:center;gap:6px;">'
-            f'<span style="width:10px;height:10px;border-radius:50%;background:{sc};'
+            f'margin-bottom:2px;">'
+            f'<span style="display:flex;align-items:center;gap:5px;">'
+            f'<span style="width:8px;height:8px;border-radius:50%;background:{sc};'
             f'display:inline-block;flex-shrink:0;"></span>'
-            f'<span style="color:#374151;font-size:14px;font-weight:600;">'
+            f'<span style="color:#374151;font-size:12px;font-weight:600;">'
             f'{_html_lib.escape(sn)} {icon}</span></span>'
-            f'<span style="color:{s_color};font-weight:800;font-size:16px;'
+            f'<span style="color:{s_color};font-weight:800;font-size:13px;'
             f'font-variant-numeric:tabular-nums;">'
             f'{s_sign}{seg_med:.1f}%</span>'
             f'</div>'
-            f'<div style="height:6px;background:#F3F4F6;border-radius:3px;overflow:hidden;">'
+            f'<div style="height:4px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
             f'<div style="height:100%;width:{bar_pct:.0f}%;background:{sc};'
-            f'border-radius:3px;"></div>'
+            f'border-radius:2px;"></div>'
             f'</div>'
             f'</div>'
         )
@@ -558,10 +558,10 @@ if not returns.empty:
         '</div>'
     )
 
-    # Top / Bottom performers — show 10 directly, no expand needed
+    # Top / Bottom performers — show 5 each
     sorted_ret = returns.sort_values(ascending=False)
-    top_items = list(sorted_ret.head(10).items())
-    bot_items = list(sorted_ret.tail(10).sort_values(ascending=True).items())
+    top_items = list(sorted_ret.head(5).items())
+    bot_items = list(sorted_ret.tail(5).sort_values(ascending=True).items())
 
     def _perf_row(ticker, pct, color, sign=""):
         try:
@@ -798,17 +798,18 @@ else:
 
 
 # ── Distribution chart ────────────────────────────────────────────────────────
-if not returns.empty:
-  try:
+_clean_dist = returns.dropna()
+if not _clean_dist.empty:
     bucket_labels = ["Down >10%", "-10% to -5%", "-5% to 0%", "0% to +5%", "+5% to +10%", "Up >10%"]
     bucket_colors = ["#DC2626", "#EF4444", "#FCA5A5", "#86EFAC", "#22C55E", "#059669"]
     counts = [0] * 6
-    for c in returns.dropna().values:
-        if c < -10: counts[0] += 1
-        elif c < -5: counts[1] += 1
-        elif c < 0: counts[2] += 1
-        elif c < 5: counts[3] += 1
-        elif c < 10: counts[4] += 1
+    for c in _clean_dist.values:
+        cv = float(c)
+        if cv < -10: counts[0] += 1
+        elif cv < -5: counts[1] += 1
+        elif cv < 0: counts[2] += 1
+        elif cv < 5: counts[3] += 1
+        elif cv < 10: counts[4] += 1
         else: counts[5] += 1
 
     dist_fig = go.Figure()
@@ -834,8 +835,6 @@ if not returns.empty:
     )
     st.plotly_chart(dist_fig, use_container_width=True,
                     config={"displayModeBar": False, "scrollZoom": False})
-  except (ValueError, TypeError, KeyError):
-    st.caption("Distribution chart could not be rendered.")
 
 
 # ── Category pill styles (tied to segment chart colors) ───────────────────────
@@ -857,91 +856,174 @@ for _sk, _sn in SEGMENT_SHORT.items():
 _PILL_DEFAULT = f"background:#F1F5F9;color:#64748B;{_PILL_BASE}"
 
 
+# ── Helpers for the Winners & Losers table ────────────────────────────────────
+
+def _safe_float(val, default=None):
+    """Safely convert to float, returning default for NaN/None/bad values."""
+    try:
+        f = float(val)
+        return default if (np.isnan(f) or np.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
+
+
+def _mini_sparkline(ticker, chart_start_date, as_of_date, color="#3B82F6"):
+    """Generate a tiny inline SVG sparkline from close_df price data."""
+    if close_df.empty or ticker not in close_df.columns:
+        return ""
+    series = close_df[ticker]
+    series = series[(series.index >= chart_start_date) & (series.index <= as_of_date)].dropna()
+    if len(series) < 3:
+        return ""
+    vals = series.values.tolist()
+    y_min, y_max = min(vals), max(vals)
+    y_range = y_max - y_min if y_max != y_min else 1
+    w, h = 80, 24
+    points = []
+    for j, v in enumerate(vals):
+        x = j / (len(vals) - 1) * w
+        y = h - ((v - y_min) / y_range * (h - 2) + 1)
+        points.append(f"{x:.1f},{y:.1f}")
+    path = "M" + "L".join(points)
+    return (
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
+        f'style="vertical-align:middle;">'
+        f'<path d="{path}" fill="none" stroke="{color}" stroke-width="1.5" '
+        f'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    )
+
+
+def _est_beginning_multiple(current_multiple, pct_change, current_tev, current_mcap):
+    """Estimate beginning-of-period EV multiple from price change.
+
+    Assumes net debt constant; market cap changed by pct_change.
+    beginning_mcap = current_mcap / (1 + pct/100)
+    beginning_tev = beginning_mcap + (current_tev - current_mcap)
+    beginning_multiple = beginning_tev / (current_tev / current_multiple)
+    """
+    if current_multiple is None or current_tev is None or current_mcap is None:
+        return None
+    if current_multiple <= 0 or current_tev <= 0 or current_mcap <= 0:
+        return None
+    divisor = 1 + pct_change / 100
+    if divisor <= 0:
+        return None
+    beg_mcap = current_mcap / divisor
+    net_debt = current_tev - current_mcap
+    beg_tev = beg_mcap + net_debt
+    if beg_tev <= 0:
+        return None
+    # denominator (e.g. NTM revenue) = current_tev / current_multiple
+    denom = current_tev / current_multiple
+    if denom <= 0:
+        return None
+    return beg_tev / denom
+
+
 # ── Winners & Losers table ────────────────────────────────────────────────────
+_n_cols = 10  # total columns for colspan
+
 st.markdown(
     '<div style="font-size:18px;font-weight:700;color:#111827;'
     'margin-top:24px;margin-bottom:4px;">Top Winners &amp; Losers</div>'
     f'<div style="font-size:13px;color:#94A3B8;margin-bottom:12px;">'
-    f'Top 25 by {period_label.lower()} price change</div>',
+    f'Top 25 by {period_label.lower()} price change &middot; '
+    f'Beginning-of-period multiples estimated from price change</div>',
     unsafe_allow_html=True,
 )
+
+# Period start for sparklines
+_spark_start = _period_start(selected_period, as_of)
 
 if returns.empty:
     st.info(f"No price data available for {period_label}. Try a shorter time period.")
 else:
-  try:
     sorted_ret = returns.dropna().sort_values(ascending=False)
     winners = list(sorted_ret.head(25).items())
     losers = list(sorted_ret.tail(25).sort_values(ascending=True).items())
 
     header = (
         '<tr>'
-        '<th style="text-align:center;width:40px;">#</th>'
-        '<th style="text-align:left;width:90px;">Ticker</th>'
+        '<th style="text-align:center;width:30px;">#</th>'
+        '<th style="text-align:left;width:80px;">Ticker</th>'
         '<th style="text-align:left;">Company</th>'
-        '<th style="text-align:left;width:140px;">Segment</th>'
-        '<th style="text-align:right;width:80px;">TEV</th>'
-        '<th style="text-align:right;width:80px;">NTM Rev x</th>'
-        '<th style="text-align:right;width:80px;">NTM Gr%</th>'
-        '<th style="text-align:right;width:100px;">% Change</th>'
+        '<th style="text-align:left;width:100px;">Segment</th>'
+        '<th style="text-align:right;width:65px;">TEV</th>'
+        '<th style="text-align:center;width:120px;">NTM Rev x<br>'
+        '<span style="font-weight:400;font-size:8px;color:#9CA3AF;">BEG &rarr; NOW</span></th>'
+        '<th style="text-align:center;width:130px;">NTM EBITDA x<br>'
+        '<span style="font-weight:400;font-size:8px;color:#9CA3AF;">BEG &rarr; NOW</span></th>'
+        '<th style="text-align:right;width:65px;">Rev Gr%</th>'
+        '<th style="text-align:right;width:80px;">% Change</th>'
+        '<th style="text-align:center;width:90px;">Price</th>'
         '</tr>'
     )
 
-    def _make_row(rank, ticker, pct, direction):
+    def _make_row(rank, ticker, pct):
         co = ticker_to_co.get(ticker, {})
         logo = logo_img_tag(ticker, size=14)
         logo_html = f'{logo}&nbsp;' if logo else ''
-
         name = str(co.get("name") or ticker)
 
         seg_key = co.get("segment", "")
         seg_name = _CB_LABELS.get(seg_key, SEGMENT_SHORT.get(seg_key, seg_key))
         pill = _PILL_STYLES.get(SEGMENT_SHORT.get(seg_key, seg_key), _PILL_DEFAULT)
 
+        pct_val = _safe_float(pct)
+        if pct_val is None:
+            return ""
+
         # TEV
-        ev = co.get("enterprise_value")
-        try:
-            ev_f = float(ev)
-            if np.isnan(ev_f) or ev_f <= 0:
-                tev_str = "\u2014"
-            elif ev_f >= 1e9:
-                tev_str = f"${ev_f/1e9:.1f}B"
-            else:
-                tev_str = f"${ev_f/1e6:.0f}M"
-        except (TypeError, ValueError):
+        ev_f = _safe_float(co.get("enterprise_value"))
+        if ev_f and ev_f > 0:
+            tev_str = f"${ev_f/1e9:.1f}B" if ev_f >= 1e9 else f"${ev_f/1e6:.0f}M"
+        else:
             tev_str = "\u2014"
 
-        # NTM Rev multiple
-        rev_x = co.get("ntm_tev_rev")
-        try:
-            rev_f = float(rev_x)
-            if np.isnan(rev_f) or rev_f <= 0 or rev_f > 75:
-                rev_str = "N/M"
-            else:
-                rev_str = f"{rev_f:.1f}x"
-        except (TypeError, ValueError):
-            rev_str = "N/M"
+        mcap_f = _safe_float(co.get("market_cap"))
 
-        # NTM Growth
-        gr = co.get("ntm_revenue_growth")
-        try:
-            gr_f = float(gr) * 100
-            if np.isnan(gr_f):
-                gr_str = "\u2014"
+        # NTM Rev multiple — before → after
+        rev_now = _safe_float(co.get("ntm_tev_rev"))
+        rev_beg = _est_beginning_multiple(rev_now, pct_val, ev_f, mcap_f) if rev_now and ev_f and mcap_f else None
+        if rev_now and 0 < rev_now < 75:
+            if rev_beg and 0 < rev_beg < 75:
+                rev_cell = (f'<span style="color:#9CA3AF;">{rev_beg:.1f}x</span>'
+                            f' <span style="color:#9CA3AF;">&rarr;</span> '
+                            f'<b>{rev_now:.1f}x</b>')
             else:
-                gr_color = "#16A34A" if gr_f >= 15 else "#374151" if gr_f >= 5 else "#DC2626"
-                gr_str = f'<span style="color:{gr_color};">{"+" if gr_f >= 0 else ""}{gr_f:.0f}%</span>'
-        except (TypeError, ValueError):
+                rev_cell = f'<b>{rev_now:.1f}x</b>'
+        else:
+            rev_cell = "N/M"
+
+        # NTM EBITDA multiple — before → after
+        ebitda_now = _safe_float(co.get("ntm_tev_ebitda"))
+        ebitda_beg = _est_beginning_multiple(ebitda_now, pct_val, ev_f, mcap_f) if ebitda_now and ev_f and mcap_f else None
+        if ebitda_now and 0 < ebitda_now < 150:
+            if ebitda_beg and 0 < ebitda_beg < 150:
+                ebitda_cell = (f'<span style="color:#9CA3AF;">{ebitda_beg:.1f}x</span>'
+                               f' <span style="color:#9CA3AF;">&rarr;</span> '
+                               f'<b>{ebitda_now:.1f}x</b>')
+            else:
+                ebitda_cell = f'<b>{ebitda_now:.1f}x</b>'
+        else:
+            ebitda_cell = "N/M"
+
+        # Revenue growth
+        gr_f = _safe_float(co.get("ntm_revenue_growth"))
+        if gr_f is not None:
+            gr_pct = gr_f * 100
+            gr_color = "#16A34A" if gr_pct >= 15 else "#374151" if gr_pct >= 5 else "#DC2626"
+            gr_str = f'<span style="color:{gr_color};">{"+" if gr_pct >= 0 else ""}{gr_pct:.0f}%</span>'
+        else:
             gr_str = "\u2014"
 
-        try:
-            pct_val = float(pct)
-            if np.isnan(pct_val):
-                return ""
-        except (TypeError, ValueError):
-            return ""
+        # Price change
         chg_color = "#059669" if pct_val >= 0 else "#DC2626"
         chg_text = f"+{pct_val:.1f}%" if pct_val >= 0 else f"{pct_val:.1f}%"
+
+        # Sparkline
+        spark_color = "#059669" if pct_val >= 0 else "#DC2626"
+        sparkline = _mini_sparkline(ticker, _spark_start, as_of, spark_color)
 
         rank_col = "#111827" if rank <= 3 else "#64748B"
         rank_fw = "700" if rank <= 3 else "500"
@@ -951,12 +1033,15 @@ else:
             f'<td style="text-align:center;color:{rank_col};font-weight:{rank_fw};font-size:12px;">{rank}</td>'
             f'<td style="text-align:left;">{logo_html}'
             f'<span style="color:#3B82F6;font-weight:600;font-size:12px;">{_html_lib.escape(ticker)}</span></td>'
-            f'<td style="text-align:left;color:#374151;font-size:12px;">{_html_lib.escape(name)}</td>'
+            f'<td style="text-align:left;color:#374151;font-size:12px;max-width:180px;'
+            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{_html_lib.escape(name)}</td>'
             f'<td style="text-align:left;"><span style="{pill}">{_html_lib.escape(seg_name)}</span></td>'
             f'<td style="text-align:right;font-size:12px;">{tev_str}</td>'
-            f'<td style="text-align:right;font-size:12px;">{rev_str}</td>'
+            f'<td style="text-align:center;font-size:12px;">{rev_cell}</td>'
+            f'<td style="text-align:center;font-size:12px;">{ebitda_cell}</td>'
             f'<td style="text-align:right;font-size:12px;">{gr_str}</td>'
             f'<td style="text-align:right;font-weight:700;font-size:13px;color:{chg_color};">{chg_text}</td>'
+            f'<td style="text-align:center;">{sparkline}</td>'
             f'</tr>'
         )
 
@@ -964,7 +1049,7 @@ else:
 
     # Winners header
     tbody += (
-        '<tr><td colspan="8" style="padding:0;background:white;border-top:none;">'
+        f'<tr><td colspan="{_n_cols}" style="padding:0;background:white;border-top:none;">'
         '<div style="display:flex;align-items:center;gap:8px;'
         'padding:10px 12px 6px 12px;border-left:3px solid #059669;'
         'background:linear-gradient(90deg,rgba(5,150,105,0.05),transparent 40%);">'
@@ -974,17 +1059,14 @@ else:
         '</div></td></tr>'
     )
     for i, (ticker, pct) in enumerate(winners, 1):
-        try:
-            if np.isnan(float(pct)):
-                continue
-        except (TypeError, ValueError):
+        if _safe_float(pct) is None:
             continue
-        tbody += _make_row(i, ticker, float(pct), "winners")
+        tbody += _make_row(i, ticker, float(pct))
 
     # Losers header
     if losers:
         tbody += (
-            '<tr><td colspan="8" style="padding:0;background:white;border-top:2px solid #E2E8F0;">'
+            f'<tr><td colspan="{_n_cols}" style="padding:0;background:white;border-top:2px solid #E2E8F0;">'
             '<div style="display:flex;align-items:center;gap:8px;'
             'padding:10px 12px 6px 12px;border-left:3px solid #DC2626;'
             'background:linear-gradient(90deg,rgba(220,38,38,0.05),transparent 40%);">'
@@ -994,12 +1076,9 @@ else:
             '</div></td></tr>'
         )
         for i, (ticker, pct) in enumerate(losers, 1):
-            try:
-                if np.isnan(float(pct)):
-                    continue
-            except (TypeError, ValueError):
+            if _safe_float(pct) is None:
                 continue
-            tbody += _make_row(i, ticker, float(pct), "losers")
+            tbody += _make_row(i, ticker, float(pct))
 
     tbody += "</tbody>"
 
@@ -1008,8 +1087,6 @@ else:
         f'<thead>{header}</thead>{tbody}</table></div>',
         unsafe_allow_html=True,
     )
-  except (ValueError, TypeError, KeyError) as _tbl_err:
-    st.error(f"Error rendering table: {_tbl_err}")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown(
