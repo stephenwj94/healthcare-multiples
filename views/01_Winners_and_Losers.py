@@ -183,7 +183,7 @@ _pill_css += (
     '}\n'
     'div[data-testid="stCheckbox"] label p {\n'
     '  margin: 0 !important; line-height: 1 !important;\n'
-    '  white-space: nowrap !important; font-size: 11px !important;\n'
+    '  white-space: nowrap !important; font-size: 14px !important;\n'
     '}\n'
 )
 for seg_key in seg_keys:
@@ -196,11 +196,11 @@ for seg_key in seg_keys:
     _pill_css += (
         f'/* {cb_label} pill — checked */\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked) {{\n'
-        f'  background: {bg}; border: 1.5px solid {border}; border-radius: 8px;\n'
-        f'  padding: 4px 8px; transition: all 0.15s ease;\n'
+        f'  background: {bg}; border: 1.5px solid {border}; border-radius: 10px;\n'
+        f'  padding: 8px 12px; transition: all 0.15s ease;\n'
         f'}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked) label p {{\n'
-        f'  color: {color} !important; font-weight: 600 !important; font-size: 11px !important;\n'
+        f'  color: {color} !important; font-weight: 600 !important; font-size: 14px !important;\n'
         f'}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked):hover {{\n'
         f'  background: {_hex_to_rgba(color, 0.14)}; border-color: {_hex_to_rgba(color, 0.5)};\n'
@@ -211,11 +211,11 @@ for seg_key in seg_keys:
     _pill_css += (
         f'/* {cb_label} pill — unchecked */\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) {{\n'
-        f'  background: #F3F4F6; border: 1.5px solid #D1D5DB; border-radius: 8px;\n'
-        f'  padding: 4px 8px; transition: all 0.15s ease; opacity: 0.7;\n'
+        f'  background: #F3F4F6; border: 1.5px solid #D1D5DB; border-radius: 10px;\n'
+        f'  padding: 8px 12px; transition: all 0.15s ease; opacity: 0.7;\n'
         f'}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) label p {{\n'
-        f'  color: #9CA3AF !important; font-weight: 500 !important; font-size: 11px !important;\n'
+        f'  color: #9CA3AF !important; font-weight: 500 !important; font-size: 14px !important;\n'
         f'}}\n'
     )
 _pill_css += "</style>"
@@ -521,26 +521,39 @@ if not returns.empty:
     _seg_med_list.sort(key=lambda x: x[1], reverse=True)
 
     _seg_medians = ""
+    # Find max absolute value for scaling bars
+    _max_abs = max((abs(m) for _, m in _seg_med_list), default=1) or 1
     for sk, seg_med in _seg_med_list:
         sc = SEGMENT_COLORS.get(sk, "#6B7280")
         sn = _CB_LABELS.get(sk, SEGMENT_SHORT.get(sk, sk))
+        icon = _SEG_ICONS.get(sk, "")
         s_sign = "+" if seg_med >= 0 else ""
         s_color = GREEN if seg_med >= 0 else RED
+        bar_pct = min(abs(seg_med) / _max_abs * 100, 100)
+        bar_color = _hex_to_rgba(sc, 0.25)
         _seg_medians += (
+            f'<div style="padding:6px 0;">'
             f'<div style="display:flex;align-items:center;justify-content:space-between;'
-            f'padding:3px 0;font-size:11px;">'
-            f'<span style="display:flex;align-items:center;gap:5px;">'
-            f'<span style="width:7px;height:7px;border-radius:50%;background:{sc};'
-            f'display:inline-block;"></span>'
-            f'<span style="color:#374151;">{_html_lib.escape(sn)}</span></span>'
-            f'<span style="color:{s_color};font-weight:700;font-variant-numeric:tabular-nums;">'
+            f'margin-bottom:3px;">'
+            f'<span style="display:flex;align-items:center;gap:6px;">'
+            f'<span style="width:10px;height:10px;border-radius:50%;background:{sc};'
+            f'display:inline-block;flex-shrink:0;"></span>'
+            f'<span style="color:#374151;font-size:14px;font-weight:600;">'
+            f'{_html_lib.escape(sn)} {icon}</span></span>'
+            f'<span style="color:{s_color};font-weight:800;font-size:16px;'
+            f'font-variant-numeric:tabular-nums;">'
             f'{s_sign}{seg_med:.1f}%</span>'
+            f'</div>'
+            f'<div style="height:6px;background:#F3F4F6;border-radius:3px;overflow:hidden;">'
+            f'<div style="height:100%;width:{bar_pct:.0f}%;background:{sc};'
+            f'border-radius:3px;"></div>'
+            f'</div>'
             f'</div>'
         )
 
     cards += (
         '<div class="wl-stat-card">'
-        f'<div class="wl-stat-label">Median {selected_period} Change</div>'
+        f'<div class="wl-stat-label" style="font-size:13px;">Median {selected_period} Change</div>'
         f'{_seg_medians}'
         '</div>'
     )
@@ -563,14 +576,17 @@ if not returns.empty:
         seg_color = SEGMENT_COLORS.get(seg_key, "#6B7280")
         logo = logo_img_tag(ticker, size=13)
         logo_h = f'{logo}&nbsp;' if logo else ''
+        name = str(co.get("name") or ticker)
         return (
-            f'<div style="display:flex;align-items:center;gap:5px;padding:2px 0;'
-            f'font-size:11px;line-height:1.4;">'
+            f'<div style="display:flex;align-items:center;gap:5px;padding:3px 0;'
+            f'font-size:12px;line-height:1.4;">'
             f'<span style="width:6px;height:6px;border-radius:50%;background:{seg_color};'
             f'flex-shrink:0;"></span>'
             f'{logo_h}'
-            f'<span style="font-weight:600;color:#111827;">{_html_lib.escape(ticker)}</span>'
-            f'<span style="color:{color};font-weight:700;margin-left:auto;'
+            f'<span style="font-weight:600;color:#3B82F6;font-size:11px;">{_html_lib.escape(ticker)}</span>'
+            f'<span style="color:#374151;flex:1;overflow:hidden;text-overflow:ellipsis;'
+            f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
+            f'<span style="color:{color};font-weight:700;margin-left:auto;white-space:nowrap;'
             f'font-variant-numeric:tabular-nums;">{pct_str}</span>'
             f'</div>'
         )
@@ -603,11 +619,23 @@ st.markdown(
     '<div style="font-size:16px;font-weight:700;color:#111827;'
     'margin-bottom:2px;margin-top:8px;">Segment Performance</div>'
     f'<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">'
-    f'Equal-weighted segment price indices, rebased to 100 ({period_label.lower()})</div>',
+    f'Market-cap weighted segment price indices, rebased to 100 ({period_label.lower()})</div>',
     unsafe_allow_html=True,
 )
 
 ticker_segment = {d["ticker"]: d["segment"] for d in all_data if d.get("ticker") and d.get("segment")}
+# Market cap weights for each ticker (for cap-weighted index)
+_ticker_mcap = {}
+for d in all_data:
+    t = d.get("ticker")
+    mc = d.get("market_cap") or d.get("enterprise_value")
+    if t and mc:
+        try:
+            mcf = float(mc)
+            if not np.isnan(mcf) and mcf > 0:
+                _ticker_mcap[t] = mcf
+        except (TypeError, ValueError):
+            pass
 
 series_map = {}
 if not close_df.empty:
@@ -624,17 +652,24 @@ if not close_df.empty:
             if seg_prices.empty:
                 continue
             first_valid = seg_prices.bfill().iloc[0].replace(0, np.nan)
-            # Drop columns where first_valid is NaN (no usable base price)
             valid_cols = first_valid.dropna().index
             if valid_cols.empty:
                 continue
             normed = seg_prices[valid_cols].div(first_valid[valid_cols]) * 100
-            seg_avg = normed.mean(axis=1).dropna()
+            # Market-cap weighted average (like S&P 500 methodology)
+            weights = pd.Series({t: _ticker_mcap.get(t, 1.0) for t in valid_cols})
+            w_sum = weights.sum()
+            if w_sum == 0 or pd.isna(w_sum):
+                weights = pd.Series(1.0 / len(valid_cols), index=valid_cols)
+            else:
+                weights = weights / w_sum
+            seg_avg = normed.mul(weights, axis=1).sum(axis=1).dropna()
             if not seg_avg.empty:
                 short_name = _CB_LABELS.get(seg_key, SEGMENT_SHORT.get(seg_key, seg_key))
                 series_map[short_name] = (seg_avg, SEGMENT_COLORS.get(seg_key, "#6B7280"))
 
 if series_map:
+  try:
     fig = go.Figure()
 
     # Reference indices (S&P, NASDAQ)
@@ -668,23 +703,33 @@ if series_map:
 
     fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8", line_width=1, opacity=0.5)
 
-    # Collect all y values for proper axis range
+    # Collect all y values for proper axis range (filter NaN/inf)
     all_y_vals = []
     for _, (ss, _) in series_map.items():
-        all_y_vals.extend(ss.values.tolist())
+        all_y_vals.extend(v for v in ss.values.tolist() if np.isfinite(v))
     for _, rs in ref_series.items():
         if rs is not None:
-            all_y_vals.extend(rs.values.tolist())
+            all_y_vals.extend(v for v in rs.values.tolist() if np.isfinite(v))
 
     # End-of-line labels — show ACTUAL values, position adjusted to avoid overlap
     label_items = []
     for seg_name, (seg_series, seg_color) in series_map.items():
         if not seg_series.empty:
-            actual_val = float(seg_series.iloc[-1])
+            try:
+                actual_val = float(seg_series.iloc[-1])
+                if np.isnan(actual_val) or np.isinf(actual_val):
+                    continue
+            except (TypeError, ValueError):
+                continue
             label_items.append((seg_name, actual_val, seg_color))
     for name, ref_s in ref_series.items():
         if not ref_s.empty:
-            actual_val = float(ref_s.iloc[-1])
+            try:
+                actual_val = float(ref_s.iloc[-1])
+                if np.isnan(actual_val) or np.isinf(actual_val):
+                    continue
+            except (TypeError, ValueError):
+                continue
             label_items.append((name, actual_val, ref_colors.get(name, "#94A3B8")))
 
     if label_items:
@@ -746,12 +791,15 @@ if series_map:
 
     st.plotly_chart(fig, use_container_width=True,
                     config={"displayModeBar": False, "scrollZoom": False})
+  except (ValueError, TypeError, KeyError) as _chart_err:
+    st.warning(f"Chart rendering error: {_chart_err}")
 else:
     st.caption("Not enough price history for segment performance chart.")
 
 
 # ── Distribution chart ────────────────────────────────────────────────────────
 if not returns.empty:
+  try:
     bucket_labels = ["Down >10%", "-10% to -5%", "-5% to 0%", "0% to +5%", "+5% to +10%", "Up >10%"]
     bucket_colors = ["#DC2626", "#EF4444", "#FCA5A5", "#86EFAC", "#22C55E", "#059669"]
     counts = [0] * 6
@@ -786,6 +834,8 @@ if not returns.empty:
     )
     st.plotly_chart(dist_fig, use_container_width=True,
                     config={"displayModeBar": False, "scrollZoom": False})
+  except (ValueError, TypeError, KeyError):
+    st.caption("Distribution chart could not be rendered.")
 
 
 # ── Category pill styles (tied to segment chart colors) ───────────────────────
@@ -819,7 +869,8 @@ st.markdown(
 if returns.empty:
     st.info(f"No price data available for {period_label}. Try a shorter time period.")
 else:
-    sorted_ret = returns.sort_values(ascending=False)
+  try:
+    sorted_ret = returns.dropna().sort_values(ascending=False)
     winners = list(sorted_ret.head(25).items())
     losers = list(sorted_ret.tail(25).sort_values(ascending=True).items())
 
@@ -842,7 +893,6 @@ else:
         logo_html = f'{logo}&nbsp;' if logo else ''
 
         name = str(co.get("name") or ticker)
-        short = (name[:26] + "\u2026") if len(name) > 27 else name
 
         seg_key = co.get("segment", "")
         seg_name = _CB_LABELS.get(seg_key, SEGMENT_SHORT.get(seg_key, seg_key))
@@ -901,7 +951,7 @@ else:
             f'<td style="text-align:center;color:{rank_col};font-weight:{rank_fw};font-size:12px;">{rank}</td>'
             f'<td style="text-align:left;">{logo_html}'
             f'<span style="color:#3B82F6;font-weight:600;font-size:12px;">{_html_lib.escape(ticker)}</span></td>'
-            f'<td style="text-align:left;color:#374151;font-size:12px;">{_html_lib.escape(short)}</td>'
+            f'<td style="text-align:left;color:#374151;font-size:12px;">{_html_lib.escape(name)}</td>'
             f'<td style="text-align:left;"><span style="{pill}">{_html_lib.escape(seg_name)}</span></td>'
             f'<td style="text-align:right;font-size:12px;">{tev_str}</td>'
             f'<td style="text-align:right;font-size:12px;">{rev_str}</td>'
@@ -958,6 +1008,8 @@ else:
         f'<thead>{header}</thead>{tbody}</table></div>',
         unsafe_allow_html=True,
     )
+  except (ValueError, TypeError, KeyError) as _tbl_err:
+    st.error(f"Error rendering table: {_tbl_err}")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown(
@@ -965,6 +1017,6 @@ st.markdown(
     f'<span style="color:#64748B;font-weight:500;">Source:</span> '
     f'Yahoo Finance (share prices) &middot; FactSet (fundamentals) &middot; '
     f'As of {date_str} &middot; '
-    f'Segment lines = equal-weighted price index per segment</div>',
+    f'Segment lines = market-cap weighted price index per segment</div>',
     unsafe_allow_html=True,
 )
