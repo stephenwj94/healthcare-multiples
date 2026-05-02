@@ -12,33 +12,33 @@
         <string>/Users/stephenjacobs/Healthcare comps/scripts/daily_refresh.sh</string>
     </array>
 
-    <!-- Weekdays at 7:42 AM local time (mirrors the tech-multiples cron). -->
+    <!-- Weekdays at 4:30 PM local time (30 min after market close). -->
     <key>StartCalendarInterval</key>
     <array>
         <dict>
             <key>Weekday</key><integer>1</integer>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>42</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
         </dict>
         <dict>
             <key>Weekday</key><integer>2</integer>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>42</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
         </dict>
         <dict>
             <key>Weekday</key><integer>3</integer>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>42</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
         </dict>
         <dict>
             <key>Weekday</key><integer>4</integer>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>42</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
         </dict>
         <dict>
             <key>Weekday</key><integer>5</integer>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>42</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
         </dict>
     </array>
 

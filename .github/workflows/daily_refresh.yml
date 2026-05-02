@@ -1,0 +1,42 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    # 4:30 PM ET = 20:30 UTC (21:30 UTC during EST, but cron uses fixed UTC;
+    # 20:30 covers EDT which is the majority of the year).
+    - cron: "30 20 * * 1-5"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run data fetch
+        env:
+          FACTSET_USERNAME_SERIAL: ${{ secrets.FACTSET_USERNAME_SERIAL }}
+          FACTSET_API_KEY: ${{ secrets.FACTSET_API_KEY }}
+        run: python -m fetcher.run_fetch
+
+      - name: Commit and push if DB changed
+        run: |
+          git config user.email "stephenwjacobs@gmail.com"
+          git config user.name "Stephen Jacobs (auto-refresh)"
+          if git diff --quiet -- data/healthcare_multiples.db; then
+            echo "No DB changes — nothing to commit."
+          else
+            git add data/healthcare_multiples.db
+            git commit -m "Daily refresh — $(date '+%Y-%m-%d')"
+            git push origin main
+          fi
