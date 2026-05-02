@@ -1,8 +1,8 @@
 """
-Overview — Compact healthcare dashboard.
+Overview V2 — Modern healthcare dashboard.
 
-Single-screen layout: segment chart, key stats, distribution, top movers.
-Market-cap weighted segment indices, expandable details everywhere.
+Elevated design with glassmorphism cards, gradient accents,
+smooth interactions, and a premium data-dense layout.
 """
 
 import streamlit as st
@@ -27,28 +27,50 @@ from fetcher.excel_override import load_overrides, apply_overrides
 # ── Page setup ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+:root {
+    --bg-primary: #0F172A;
+    --bg-card: rgba(30,41,59,0.7);
+    --bg-card-hover: rgba(51,65,85,0.6);
+    --border-subtle: rgba(148,163,184,0.15);
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #10B981;
+    --accent-red: #EF4444;
+}
 .block-container {
     max-width: 100% !important;
     padding: 0.8rem 2rem 1rem 2rem !important;
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
 }
-.stApp { background-color: #FAFBFC !important; }
-.main .block-container { background-color: #FAFBFC !important; color: #1A1A2E !important; }
+.stApp { background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%) !important; }
+.main .block-container { background: transparent !important; color: var(--text-primary) !important; }
+h1,h2,h3,h4,h5,h6 { color: var(--text-primary) !important; }
 /* Tighter Streamlit spacing */
 div[data-testid="stVerticalBlock"] > div { padding-top: 0 !important; }
-/* Compact stat boxes */
+/* Glass card */
 .v2-card {
-    background: white; border: 1px solid #E5E7EB; border-radius: 10px;
-    padding: 10px 14px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.v2-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .v2-card-title {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #6B7280; margin-bottom: 4px;
+    letter-spacing: 0.08em; color: var(--text-secondary); margin-bottom: 4px;
 }
-.v2-big { font-size: 22px; font-weight: 800; color: #111827; line-height: 1.1; }
-.v2-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+.v2-big { font-size: 26px; font-weight: 800; color: var(--text-primary); line-height: 1.1; }
+.v2-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 /* Checkbox pills */
 div[data-testid="stCheckbox"] label {
     display: flex !important; align-items: center !important;
@@ -57,6 +79,7 @@ div[data-testid="stCheckbox"] label {
 div[data-testid="stCheckbox"] label p {
     margin: 0 !important; line-height: 1 !important;
     white-space: nowrap !important; font-size: 12px !important;
+    color: var(--text-secondary) !important;
 }
 div[data-testid="stColumn"] {
     flex: 1 1 0 !important; min-width: 0 !important;
@@ -64,6 +87,12 @@ div[data-testid="stColumn"] {
 /* Expandable details styling */
 details summary { list-style: none; cursor: pointer; user-select: none; }
 details summary::-webkit-details-marker { display: none; }
+details[open] summary .expand-arrow { transform: rotate(90deg); }
+/* Override Streamlit label colors */
+label, .stSelectbox label, div[data-testid="stMarkdownContainer"] p {
+    color: var(--text-secondary) !important;
+}
+div[data-testid="stMetricValue"] { color: var(--text-primary) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,10 +138,13 @@ date_str = as_of.strftime("%b %d, %Y")
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
-    f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px;">'
-    f'<span style="font-size:22px;font-weight:800;color:#111827;">Overview</span>'
-    f'<span style="font-size:12px;color:#9CA3AF;">Healthcare universe performance '
-    f'&middot; {date_str}</span></div>',
+    f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">'
+    f'<div style="background:linear-gradient(135deg,#3B82F6,#8B5CF6);'
+    f'-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
+    f'font-size:24px;font-weight:900;letter-spacing:-0.02em;">Overview</div>'
+    f'<div style="height:20px;width:1px;background:rgba(148,163,184,0.3);"></div>'
+    f'<span style="font-size:12px;color:#64748B;font-weight:500;">'
+    f'Healthcare Universe &middot; {date_str}</span></div>',
     unsafe_allow_html=True,
 )
 
@@ -139,7 +171,7 @@ _PERIOD_LABELS = {
 # Period + segments in one row — period label+dropdown tight, pills equally spaced
 _lbl_col, _sel_col, *_seg_cols = st.columns([0.35, 0.4] + [1] * len(seg_keys))
 with _lbl_col:
-    st.markdown('<div style="font-size:12px;font-weight:600;color:#374151;'
+    st.markdown('<div style="font-size:12px;font-weight:600;color:#CBD5E1;'
                 'padding-top:8px;">Period</div>', unsafe_allow_html=True)
 with _sel_col:
     selected_period = st.selectbox("Period", _PERIOD_OPTIONS, index=0,
@@ -161,10 +193,10 @@ for seg_key in seg_keys:
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:checked) label p {{\n'
         f'  color: {color} !important; font-weight: 600 !important;\n}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) {{\n'
-        f'  background: #F3F4F6; border: 1.5px solid #D1D5DB; border-radius: 8px;\n'
-        f'  padding: 4px 8px; opacity: 0.6;\n}}\n'
+        f'  background: rgba(30,41,59,0.5); border: 1.5px solid rgba(148,163,184,0.2); border-radius: 8px;\n'
+        f'  padding: 4px 8px; opacity: 0.5;\n}}\n'
         f'div[data-testid="stCheckbox"]:has(input[aria-label="{aria}"]:not(:checked)) label p {{\n'
-        f'  color: #9CA3AF !important;\n}}\n'
+        f'  color: #64748B !important;\n}}\n'
     )
 _pill_css += "</style>"
 st.markdown(_pill_css, unsafe_allow_html=True)
@@ -352,9 +384,9 @@ with left_col:
             tc = GREEN if rv >= 0 else RED
             _ticker_rows += (
                 f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
-                f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
+                f'{lh}<span style="color:#60A5FA;font-weight:600;width:48px;" '
                 f'title="{_html_lib.escape(name)} — Source: Yahoo Finance">{_html_lib.escape(t)}</span>'
-                f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
+                f'<span style="color:#94A3B8;flex:1;overflow:hidden;text-overflow:ellipsis;'
                 f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
                 f'<span style="color:{tc};font-weight:700;font-variant-numeric:tabular-nums;">'
                 f'{"+" if rv >= 0 else ""}{rv:.1f}%</span></div>'
@@ -368,11 +400,11 @@ with left_col:
             lh = f'{logo}&nbsp;' if logo else ''
             _ticker_rows += (
                 f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
-                f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
+                f'{lh}<span style="color:#60A5FA;font-weight:600;width:48px;" '
                 f'title="{_html_lib.escape(name)}">{_html_lib.escape(t)}</span>'
-                f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
+                f'<span style="color:#94A3B8;flex:1;overflow:hidden;text-overflow:ellipsis;'
                 f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
-                f'<span style="color:#9CA3AF;font-size:10px;">No data</span></div>'
+                f'<span style="color:#64748B;font-size:10px;">No data</span></div>'
             )
 
         _n_tickers = len(list(tickers_sorted)) + len(tickers_no_data)
@@ -380,8 +412,8 @@ with left_col:
             f'<details style="margin-bottom:2px;">'
             f'<summary style="display:flex;align-items:center;gap:5px;padding:2px 0;">'
             f'<span style="width:7px;height:7px;border-radius:50%;background:{sc};flex-shrink:0;"></span>'
-            f'<span style="color:#374151;font-size:11px;font-weight:500;width:68px;">{_html_lib.escape(sn)}</span>'
-            f'<span style="flex:1;height:4px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
+            f'<span style="color:#CBD5E1;font-size:11px;font-weight:500;width:68px;">{_html_lib.escape(sn)}</span>'
+            f'<span style="flex:1;height:4px;background:rgba(51,65,85,0.5);border-radius:2px;overflow:hidden;">'
             f'<span style="display:block;height:100%;width:{bar_pct:.0f}%;background:{sc};'
             f'border-radius:2px;"></span></span>'
             f'<span style="color:{s_color};font-weight:700;font-size:11px;width:48px;text-align:right;'
@@ -389,9 +421,9 @@ with left_col:
             f'{"+" if wcr >= 0 else ""}{wcr:.1f}%</span>'
             f'<span style="color:#CBD5E1;font-size:9px;"> \u25B8</span>'
             f'</summary>'
-            f'<div style="margin:2px 0 4px 12px;padding:4px 8px;background:#F9FAFB;'
-            f'border-radius:6px;border:1px solid #F3F4F6;">'
-            f'<div style="font-size:9px;color:#9CA3AF;margin-bottom:2px;">{_n_tickers} companies</div>'
+            f'<div style="margin:2px 0 4px 12px;padding:4px 8px;background:rgba(15,23,42,0.5);'
+            f'border-radius:6px;border:1px solid rgba(148,163,184,0.1);">'
+            f'<div style="font-size:9px;color:#64748B;margin-bottom:2px;">{_n_tickers} companies</div>'
             f'{_ticker_rows}</div></details>'
         )
 
@@ -399,7 +431,7 @@ with left_col:
         f'<div class="v2-card" style="margin-bottom:8px;" '
         f'title="Market-cap weighted {period_label.lower()} return by segment — Source: Yahoo Finance">'
         f'<div class="v2-card-title">{period_label} by Segment '
-        f'<span style="font-weight:400;text-transform:none;color:#9CA3AF;">'
+        f'<span style="font-weight:400;text-transform:none;color:#64748B;">'
         f'(mcap-weighted \u2022 click to expand)</span></div>'
         f'{_seg_html}</div>',
         unsafe_allow_html=True,
@@ -441,9 +473,9 @@ with left_col:
                 lh = f'{logo}&nbsp;' if logo else ''
                 _inner += (
                     f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
-                    f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
+                    f'{lh}<span style="color:#60A5FA;font-weight:600;width:48px;" '
                     f'title="{_html_lib.escape(name)} — Source: Yahoo Finance">{_html_lib.escape(t)}</span>'
-                    f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
+                    f'<span style="color:#94A3B8;flex:1;overflow:hidden;text-overflow:ellipsis;'
                     f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
                     f'<span style="color:{tc};font-weight:700;font-variant-numeric:tabular-nums;">'
                     f'{"+" if cv >= 0 else ""}{cv:.1f}%</span></div>'
@@ -452,23 +484,23 @@ with left_col:
             _dist_html += (
                 f'<details style="margin-bottom:1px;">'
                 f'<summary style="display:flex;align-items:center;gap:3px;padding:1px 0;font-size:10px;">'
-                f'<span style="width:52px;color:#6B7280;text-align:right;flex-shrink:0;">{lbl}</span>'
-                f'<span style="flex:1;height:10px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
+                f'<span style="width:52px;color:#94A3B8;text-align:right;flex-shrink:0;">{lbl}</span>'
+                f'<span style="flex:1;height:10px;background:rgba(51,65,85,0.5);border-radius:2px;overflow:hidden;">'
                 f'<span style="display:block;height:100%;width:{bw:.0f}%;background:{clr};'
                 f'border-radius:2px;"></span></span>'
-                f'<span style="width:22px;color:#374151;font-weight:600;">{cnt}</span>'
+                f'<span style="width:22px;color:#CBD5E1;font-weight:600;">{cnt}</span>'
                 f'<span style="color:#CBD5E1;font-size:8px;"> \u25B8</span>'
                 f'</summary>'
-                f'<div style="margin:1px 0 3px 55px;padding:3px 6px;background:#F9FAFB;'
-                f'border-radius:4px;border:1px solid #F3F4F6;">'
-                f'{_inner or "<span style=&quot;color:#9CA3AF;font-size:10px;&quot;>None</span>"}'
+                f'<div style="margin:1px 0 3px 55px;padding:3px 6px;background:rgba(15,23,42,0.5);'
+                f'border-radius:4px;border:1px solid rgba(148,163,184,0.1);">'
+                f'{_inner or "<span style=&quot;color:#64748B;font-size:10px;&quot;>None</span>"}'
                 f'</div></details>'
             )
 
         st.markdown(
             f'<div class="v2-card" title="Source: Yahoo Finance">'
             f'<div class="v2-card-title">{period_label} Distribution '
-            f'<span style="font-weight:400;text-transform:none;color:#9CA3AF;">'
+            f'<span style="font-weight:400;text-transform:none;color:#64748B;">'
             f'(click to expand)</span></div>'
             f'{_dist_html}</div>',
             unsafe_allow_html=True,
@@ -516,7 +548,7 @@ with right_col:
     if series_map:
         fig = go.Figure()
 
-        ref_colors = {"S&P 500": "#9CA3AF", "NASDAQ": "#B0B7C3"}
+        ref_colors = {"S&P 500": "#64748B", "NASDAQ": "#475569"}
         ref_series = {}
         for name in ["S&P 500", "NASDAQ"]:
             s = index_prices.get(name)
@@ -542,8 +574,8 @@ with right_col:
                 hovertemplate=f"<b>{sn}</b>: %{{y:.1f}}<extra></extra>",
             ))
 
-        fig.add_hline(y=100, line_dash="dash", line_color="#94A3B8",
-                      line_width=1, opacity=0.5)
+        fig.add_hline(y=100, line_dash="dash", line_color="#475569",
+                      line_width=1, opacity=0.6)
 
         # Y range
         all_y = []
@@ -604,26 +636,26 @@ with right_col:
         fig.update_layout(
             height=500,
             margin=dict(l=35, r=150, t=6, b=28),
-            plot_bgcolor="white", paper_bgcolor="white",
-            font=dict(family="DM Sans, sans-serif"),
+            plot_bgcolor="rgba(15,23,42,0.6)", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter, DM Sans, sans-serif", color="#94A3B8"),
             showlegend=False,
             xaxis=dict(showgrid=False, tickformat=tick_fmt, dtick=dtick,
-                       tickfont=dict(size=9, color="#9CA3AF"),
-                       linecolor="#E5E7EB", fixedrange=True,
+                       tickfont=dict(size=9, color="#64748B"),
+                       linecolor="rgba(148,163,184,0.15)", fixedrange=True,
                        range=[chart_start, as_of]),
-            yaxis=dict(showgrid=True, gridcolor="#F3F4F6",
-                       tickfont=dict(size=9, color="#9CA3AF"),
-                       linecolor="#E5E7EB", ticksuffix="  ",
+            yaxis=dict(showgrid=True, gridcolor="rgba(148,163,184,0.08)",
+                       tickfont=dict(size=9, color="#64748B"),
+                       linecolor="rgba(148,163,184,0.15)", ticksuffix="  ",
                        range=y_range),
             hovermode="x",
-            hoverlabel=dict(bgcolor="white", bordercolor="#E5E7EB",
-                            font=dict(size=11, family="DM Sans")),
+            hoverlabel=dict(bgcolor="#1E293B", bordercolor="rgba(148,163,184,0.2)",
+                            font=dict(size=11, family="Inter, DM Sans", color="#F1F5F9")),
         )
 
         st.markdown(
-            f'<div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:1px;">'
+            f'<div style="font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:1px;">'
             f'Segment Performance</div>'
-            f'<div style="font-size:10px;color:#9CA3AF;margin-bottom:2px;"'
+            f'<div style="font-size:10px;color:#64748B;margin-bottom:2px;"'
             f' title="Source: Yahoo Finance. Weighted by market cap.">'
             f'Market-cap weighted, rebased to 100 ({period_label.lower()})</div>',
             unsafe_allow_html=True,
@@ -677,17 +709,17 @@ def _beg_now_cell(beg_val, now_val, cap=75):
     """Format a 'beg → now' cell."""
     if now_val and 0 < now_val < cap:
         if beg_val and 0 < beg_val < cap:
-            return (f'<span style="color:#9CA3AF;font-size:10px;">{beg_val:.1f}x</span>'
-                    f'<span style="color:#CBD5E1;"> \u2192 </span>'
-                    f'<b>{now_val:.1f}x</b>')
-        return f'<b>{now_val:.1f}x</b>'
-    return "N/M"
+            return (f'<span style="color:#64748B;font-size:10px;">{beg_val:.1f}x</span>'
+                    f'<span style="color:#475569;"> \u2192 </span>'
+                    f'<b style="color:#E2E8F0;">{now_val:.1f}x</b>')
+        return f'<b style="color:#E2E8F0;">{now_val:.1f}x</b>'
+    return '<span style="color:#475569;">N/M</span>'
 
 
 if not returns.empty:
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
 
-    _sub_hdr = '<span style="font-weight:400;font-size:7px;color:#9CA3AF;">BEG\u2192NOW</span>'
+    _sub_hdr = '<span style="font-weight:400;font-size:7px;color:#64748B;">BEG\u2192NOW</span>'
     _tbl_header = (
         '<tr>'
         '<th style="text-align:center;width:22px;padding:3px 4px;">#</th>'
@@ -735,23 +767,24 @@ if not returns.empty:
             spark = _mini_spark(ticker, accent)
 
             rows += (
-                f'<tr title="{_html_lib.escape(name)} \u2014 Source: Yahoo Finance / FactSet">'
-                f'<td style="text-align:center;font-size:10px;color:#9CA3AF;padding:3px 4px;">{i}</td>'
+                f'<tr style="border-bottom:1px solid rgba(148,163,184,0.06);" '
+                f'title="{_html_lib.escape(name)} \u2014 Source: Yahoo Finance / FactSet">'
+                f'<td style="text-align:center;font-size:10px;color:#64748B;padding:3px 4px;">{i}</td>'
                 f'<td style="text-align:left;padding:3px 6px;font-size:11px;">'
                 f'<span style="width:6px;height:6px;border-radius:50%;background:{sc};'
                 f'display:inline-block;vertical-align:middle;margin-right:3px;" '
                 f'title="{_html_lib.escape(_CB_LABELS.get(sk, sk))}"></span>'
-                f'{lh}<span style="color:#3B82F6;font-weight:600;" '
+                f'{lh}<span style="color:#60A5FA;font-weight:600;" '
                 f'title="{_html_lib.escape(name)}">{_html_lib.escape(ticker)}</span></td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:10px;color:#94A3B8;padding:3px 4px;"'
                 f' title="Source: FactSet">{_fmt_tev(ev_f)}</td>'
-                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f'<td style="text-align:center;font-size:10px;color:#CBD5E1;padding:3px 2px;"'
                 f' title="NTM EV/Revenue — Source: FactSet">{rev_cell}</td>'
-                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f'<td style="text-align:center;font-size:10px;color:#CBD5E1;padding:3px 2px;"'
                 f' title="NTM EV/EBITDA — Source: FactSet">{ebitda_cell}</td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:10px;color:#94A3B8;padding:3px 4px;"'
                 f' title="NTM Revenue Growth — Source: FactSet">{gr_str}</td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:10px;color:#94A3B8;padding:3px 4px;"'
                 f' title="EBITDA Margin — Source: FactSet">{mgn_str}</td>'
                 f'<td style="text-align:right;font-weight:700;font-size:11px;color:{accent};'
                 f'padding:3px 4px;">{sign}{pv:.1f}%</td>'
@@ -769,17 +802,18 @@ if not returns.empty:
         has_more = len(items) > limit
 
         html = (
-            f'<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;'
-            f'overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+            f'<div style="background:rgba(30,41,59,0.7);backdrop-filter:blur(12px);'
+            f'border:1px solid rgba(148,163,184,0.15);border-radius:10px;'
+            f'overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.2);">'
             f'<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;'
             f'border-left:3px solid {accent};'
-            f'background:linear-gradient(90deg,{_hex_to_rgba(accent, 0.04)},transparent 40%);">'
+            f'background:linear-gradient(90deg,{_hex_to_rgba(accent, 0.1)},transparent 40%);">'
             f'<span style="font-size:11px;font-weight:800;color:{accent};'
             f'text-transform:uppercase;letter-spacing:0.05em;">{title}</span>'
-            f'<span style="font-size:10px;color:#94A3B8;">{period_label}</span></div>'
-            f'<table style="width:100%;border-collapse:collapse;font-family:DM Sans,sans-serif;'
+            f'<span style="font-size:10px;color:#64748B;">{period_label}</span></div>'
+            f'<table style="width:100%;border-collapse:collapse;font-family:Inter,DM Sans,sans-serif;'
             f'font-variant-numeric:tabular-nums;">'
-            f'<thead><tr style="border-bottom:1px solid #E5E7EB;background:#F9FAFB;">'
+            f'<thead><tr style="border-bottom:1px solid rgba(148,163,184,0.1);background:rgba(15,23,42,0.4);">'
         )
         # Minimal header
         for th_txt in ["#", "Ticker", "TEV", "Rev x", "EBITDA x", "Gr%", "Mgn%",
@@ -787,7 +821,7 @@ if not returns.empty:
             align = "center" if th_txt in ("#", "Rev x", "EBITDA x", "Chart") else (
                 "left" if th_txt == "Ticker" else "right")
             html += (
-                f'<th style="font-size:8px;color:#9CA3AF;text-transform:uppercase;'
+                f'<th style="font-size:8px;color:#64748B;text-transform:uppercase;'
                 f'padding:3px 4px;text-align:{align};">{th_txt}</th>'
             )
         html += f'</tr></thead><tbody>{rows}</tbody></table></div>'
@@ -800,23 +834,23 @@ if not returns.empty:
     # Styled show more/fewer button CSS
     st.markdown("""<style>
     button[data-testid="stBaseButton-secondary"][kind="secondary"] {
-        background: linear-gradient(135deg, #F8FAFC, #EEF2FF) !important;
-        border: 1px solid #CBD5E1 !important;
+        background: linear-gradient(135deg, rgba(30,41,59,0.8), rgba(51,65,85,0.6)) !important;
+        border: 1px solid rgba(148,163,184,0.2) !important;
         border-radius: 8px !important;
-        color: #475569 !important;
+        color: #94A3B8 !important;
         font-size: 11px !important;
         font-weight: 600 !important;
         padding: 6px 16px !important;
         width: 100% !important;
         transition: all 0.15s ease !important;
-        font-family: 'DM Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }
     button[data-testid="stBaseButton-secondary"][kind="secondary"]:hover {
-        background: linear-gradient(135deg, #EEF2FF, #E0E7FF) !important;
-        border-color: #818CF8 !important;
-        color: #3730A3 !important;
+        background: linear-gradient(135deg, rgba(51,65,85,0.8), rgba(71,85,105,0.6)) !important;
+        border-color: rgba(99,102,241,0.4) !important;
+        color: #C7D2FE !important;
         transform: translateY(-1px) !important;
-        box-shadow: 0 2px 8px rgba(99,102,241,0.15) !important;
+        box-shadow: 0 2px 8px rgba(99,102,241,0.2) !important;
     }
     </style>""", unsafe_allow_html=True)
 
