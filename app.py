@@ -243,49 +243,6 @@ div[data-testid="stAlert"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Password gate ─────────────────────────────────────────────────────────────
-if not st.session_state.get("authenticated"):
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] { display: none !important; }
-    .login-wrap {
-        display: flex; flex-direction: column; align-items: center;
-        justify-content: center; min-height: 70vh; gap: 0;
-    }
-    .login-box {
-        background: #FFFFFF; border: 1px solid #E5E7EB;
-        border-radius: 12px; padding: 40px 48px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-        width: 100%; max-width: 380px;
-    }
-    .login-title {
-        font-size: 20px; font-weight: 700; color: #111827;
-        margin-bottom: 4px; text-align: center;
-    }
-    .login-sub {
-        font-size: 13px; color: #6B7280;
-        margin-bottom: 28px; text-align: center;
-    }
-    </style>
-    <div class="login-wrap"><div class="login-box">
-        <p class="login-title">Healthcare Public Market Comps</p>
-        <p class="login-sub">Enter password to continue</p>
-    </div></div>
-    """, unsafe_allow_html=True)
-
-    pwd = st.text_input("Password", type="password", label_visibility="collapsed",
-                        placeholder="Password")
-    if pwd:
-        try:
-            correct = st.secrets.get("APP_PASSWORD", "permirahc")
-        except (FileNotFoundError, Exception):
-            correct = "permirahc"
-        if pwd == correct:
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("Incorrect password.")
-    st.stop()
 
 # ── Brand header — top of sidebar, above nav ─────────────────────────────────
 _brand_svg = (
