@@ -278,7 +278,6 @@ st.sidebar.markdown(
 pg = st.navigation({
     "Overview": [
         st.Page("views/01b_Overview_V2.py",            title="Overview",                icon=":material/trending_up:", default=True),
-        st.Page("views/01c_Overview_Modern.py",        title="Overview V2",             icon=":material/auto_awesome:"),
         st.Page("views/02_Valuation_Lookback.py",     title="Valuation Lookback",      icon=":material/history:"),
         st.Page("views/03_Valuation_Regression.py",   title="Valuation Regression",    icon=":material/analytics:"),
     ],

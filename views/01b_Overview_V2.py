@@ -28,10 +28,10 @@ from fetcher.excel_override import load_overrides, apply_overrides
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+* { font-family: 'DM Sans', sans-serif !important; }
 .block-container {
     max-width: 100% !important;
     padding: 0.8rem 2rem 1rem 2rem !important;
-    font-family: 'DM Sans', sans-serif !important;
 }
 .stApp { background-color: #FAFBFC !important; }
 .main .block-container { background-color: #FAFBFC !important; color: #1A1A2E !important; }
@@ -56,7 +56,7 @@ div[data-testid="stCheckbox"] label {
 }
 div[data-testid="stCheckbox"] label p {
     margin: 0 !important; line-height: 1 !important;
-    white-space: nowrap !important; font-size: 12px !important;
+    white-space: nowrap !important; font-size: 11px !important;
 }
 div[data-testid="stColumn"] {
     flex: 1 1 0 !important; min-width: 0 !important;
@@ -109,9 +109,9 @@ date_str = as_of.strftime("%b %d, %Y")
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
-    f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px;">'
-    f'<span style="font-size:22px;font-weight:800;color:#111827;">Overview</span>'
-    f'<span style="font-size:12px;color:#9CA3AF;">Healthcare universe performance '
+    f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:2px;">'
+    f'<span style="font-size:20px;font-weight:800;color:#111827;">Overview</span>'
+    f'<span style="font-size:11px;color:#9CA3AF;">Healthcare universe performance '
     f'&middot; {date_str}</span></div>',
     unsafe_allow_html=True,
 )
@@ -284,16 +284,17 @@ with left_col:
     down = n_with_data - up
     pct_adv = up / n_with_data * 100 if n_with_data else 0
 
-    # Universe + Advancing side by side
+    # Universe + Advancing/Declining side by side
+    pct_dec = 100 - pct_adv
     st.markdown(
         f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
         f'<div class="v2-card" title="Source: FactSet fundamentals">'
         f'<div class="v2-card-title">Universe</div>'
         f'<div class="v2-big">{n_total}</div>'
-        f'<div class="v2-sub">{n_with_data} with price data</div></div>'
+        f'<div class="v2-sub">{len(selected_segments)} segments selected</div></div>'
         f'<div class="v2-card" title="Source: Yahoo Finance prices">'
-        f'<div class="v2-card-title">Advancing</div>'
-        f'<div class="v2-big" style="color:{GREEN};">{pct_adv:.0f}%</div>'
+        f'<div class="v2-card-title">Advancing / Declining</div>'
+        f'<div class="v2-big">{pct_adv:.0f}% / {pct_dec:.0f}%</div>'
         f'<div class="v2-sub"><span style="color:{GREEN};font-weight:700;">{up}</span> up '
         f'<span style="color:{RED};font-weight:700;">{down}</span> down</div></div>'
         f'</div>',
@@ -328,15 +329,13 @@ with left_col:
             wcr = seg_rets.mean()
         if pd.isna(wcr):
             continue
-        # All tickers: those with returns sorted, then those without
         tickers_sorted = seg_rets.sort_values(ascending=False)
-        tickers_no_data = [t for t in all_t if t not in returns.index]
-        _seg_data.append((sk, float(wcr), tickers_sorted, tickers_no_data))
+        _seg_data.append((sk, float(wcr), tickers_sorted))
     _seg_data.sort(key=lambda x: x[1], reverse=True)
 
-    _max_abs = max((abs(m) for _, m, _, _ in _seg_data), default=1) or 1
+    _max_abs = max((abs(m) for _, m, _ in _seg_data), default=1) or 1
     _seg_html = ""
-    for sk, wcr, tickers_sorted, tickers_no_data in _seg_data:
+    for sk, wcr, tickers_sorted in _seg_data:
         sc = SEGMENT_COLORS.get(sk, "#6B7280")
         sn = _CB_LABELS.get(sk, sk)
         icon = _SEG_ICONS.get(sk, "")
@@ -351,7 +350,7 @@ with left_col:
             lh = f'{logo}&nbsp;' if logo else ''
             tc = GREEN if rv >= 0 else RED
             _ticker_rows += (
-                f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
+                f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:11px;">'
                 f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
                 f'title="{_html_lib.escape(name)} — Source: Yahoo Finance">{_html_lib.escape(t)}</span>'
                 f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
@@ -360,22 +359,7 @@ with left_col:
                 f'{"+" if rv >= 0 else ""}{rv:.1f}%</span></div>'
             )
 
-        # Add tickers without return data
-        for t in tickers_no_data:
-            co = ticker_to_co.get(t, {})
-            name = str(co.get("name") or t)
-            logo = logo_img_tag(t, size=11)
-            lh = f'{logo}&nbsp;' if logo else ''
-            _ticker_rows += (
-                f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
-                f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
-                f'title="{_html_lib.escape(name)}">{_html_lib.escape(t)}</span>'
-                f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
-                f'white-space:nowrap;">{_html_lib.escape(name)}</span>'
-                f'<span style="color:#9CA3AF;font-size:10px;">No data</span></div>'
-            )
-
-        _n_tickers = len(list(tickers_sorted)) + len(tickers_no_data)
+        _n_tickers = len(list(tickers_sorted))
         _seg_html += (
             f'<details style="margin-bottom:2px;">'
             f'<summary style="display:flex;align-items:center;gap:5px;padding:2px 0;">'
@@ -390,7 +374,7 @@ with left_col:
             f'<span style="color:#CBD5E1;font-size:9px;"> \u25B8</span>'
             f'</summary>'
             f'<div style="margin:2px 0 4px 12px;padding:4px 8px;background:#F9FAFB;'
-            f'border-radius:6px;border:1px solid #F3F4F6;">'
+            f'border-radius:6px;border:1px solid #F3F4F6;max-height:160px;overflow-y:auto;">'
             f'<div style="font-size:9px;color:#9CA3AF;margin-bottom:2px;">{_n_tickers} companies</div>'
             f'{_ticker_rows}</div></details>'
         )
@@ -440,7 +424,7 @@ with left_col:
                 logo = logo_img_tag(t, size=11)
                 lh = f'{logo}&nbsp;' if logo else ''
                 _inner += (
-                    f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:10px;">'
+                    f'<div style="display:flex;align-items:center;gap:4px;padding:1px 0;font-size:11px;">'
                     f'{lh}<span style="color:#3B82F6;font-weight:600;width:48px;" '
                     f'title="{_html_lib.escape(name)} — Source: Yahoo Finance">{_html_lib.escape(t)}</span>'
                     f'<span style="color:#6B7280;flex:1;overflow:hidden;text-overflow:ellipsis;'
@@ -451,7 +435,7 @@ with left_col:
 
             _dist_html += (
                 f'<details style="margin-bottom:1px;">'
-                f'<summary style="display:flex;align-items:center;gap:3px;padding:1px 0;font-size:10px;">'
+                f'<summary style="display:flex;align-items:center;gap:3px;padding:1px 0;font-size:11px;">'
                 f'<span style="width:52px;color:#6B7280;text-align:right;flex-shrink:0;">{lbl}</span>'
                 f'<span style="flex:1;height:10px;background:#F3F4F6;border-radius:2px;overflow:hidden;">'
                 f'<span style="display:block;height:100%;width:{bw:.0f}%;background:{clr};'
@@ -460,7 +444,7 @@ with left_col:
                 f'<span style="color:#CBD5E1;font-size:8px;"> \u25B8</span>'
                 f'</summary>'
                 f'<div style="margin:1px 0 3px 55px;padding:3px 6px;background:#F9FAFB;'
-                f'border-radius:4px;border:1px solid #F3F4F6;">'
+                f'border-radius:4px;border:1px solid #F3F4F6;max-height:140px;overflow-y:auto;">'
                 f'{_inner or "<span style=&quot;color:#9CA3AF;font-size:10px;&quot;>None</span>"}'
                 f'</div></details>'
             )
@@ -590,12 +574,15 @@ with right_col:
                     bgcolor=color, borderpad=3, bordercolor=color, borderwidth=1,
                 )
 
-        # X-axis ticks — clean month boundaries
+        # X-axis ticks — show years and intermediary months
         if chart_months <= 3:
             dtick = "M1"
-            tick_fmt = "%b %d"
+            tick_fmt = "%b %d, '%y"
         elif chart_months <= 12:
             dtick = "M2"
+            tick_fmt = "%b '%y"
+        elif chart_months <= 36:
+            dtick = "M3"
             tick_fmt = "%b '%y"
         else:
             dtick = "M6"
@@ -650,57 +637,22 @@ def _est_beg_multiple(cur_mult, pct_chg, cur_tev, cur_mcap):
     return beg_tev / denom if denom > 0 else None
 
 
-def _mini_spark(ticker, color="#3B82F6"):
-    if close_df.empty or ticker not in close_df.columns:
-        return ""
-    s = close_df[ticker]
-    s = s[(s.index >= _period_start(selected_period, as_of)) & (s.index <= as_of)].dropna()
-    if len(s) < 3:
-        return ""
-    vals = s.values.tolist()
-    ymin, ymax = min(vals), max(vals)
-    yr = ymax - ymin if ymax != ymin else 1
-    w, h = 56, 16
-    pts = []
-    for j, v in enumerate(vals):
-        x = j / (len(vals) - 1) * w
-        y = h - ((v - ymin) / yr * (h - 2) + 1)
-        pts.append(f"{x:.1f},{y:.1f}")
-    return (
-        f'<svg width="{w}" height="{h}" style="vertical-align:middle;">'
-        f'<path d="M{"L".join(pts)}" fill="none" stroke="{color}" '
-        f'stroke-width="1.5" stroke-linecap="round"/></svg>'
-    )
-
-
-def _beg_now_cell(beg_val, now_val, cap=75):
+def _beg_now_cell(beg_val, now_val, cap=75, suffix="x"):
     """Format a 'beg → now' cell."""
-    if now_val and 0 < now_val < cap:
-        if beg_val and 0 < beg_val < cap:
-            return (f'<span style="color:#9CA3AF;font-size:10px;">{beg_val:.1f}x</span>'
+    if now_val is not None and 0 < abs(now_val) < cap:
+        if beg_val is not None and 0 < abs(beg_val) < cap:
+            return (f'<span style="color:#9CA3AF;font-size:10px;">{beg_val:.1f}{suffix}</span>'
                     f'<span style="color:#CBD5E1;"> \u2192 </span>'
-                    f'<b>{now_val:.1f}x</b>')
-        return f'<b>{now_val:.1f}x</b>'
-    return "N/M"
+                    f'<b>{now_val:.1f}{suffix}</b>')
+        return f'<b>{now_val:.1f}{suffix}</b>'
+    return "\u2014"
+
 
 
 if not returns.empty:
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
 
     _sub_hdr = '<span style="font-weight:400;font-size:7px;color:#9CA3AF;">BEG\u2192NOW</span>'
-    _tbl_header = (
-        '<tr>'
-        '<th style="text-align:center;width:22px;padding:3px 4px;">#</th>'
-        '<th style="text-align:left;padding:3px 6px;width:54px;">Ticker</th>'
-        '<th style="text-align:right;width:48px;padding:3px 4px;">TEV</th>'
-        f'<th style="text-align:center;width:90px;padding:3px 2px;">Rev x {_sub_hdr}</th>'
-        f'<th style="text-align:center;width:100px;padding:3px 2px;">EBITDA x {_sub_hdr}</th>'
-        '<th style="text-align:right;width:44px;padding:3px 4px;">Gr%</th>'
-        '<th style="text-align:right;width:44px;padding:3px 4px;">Mgn%</th>'
-        '<th style="text-align:right;width:58px;padding:3px 4px;">\u0394 Price</th>'
-        '<th style="text-align:center;width:60px;padding:3px 2px;">Chart</th>'
-        '</tr>'
-    )
 
     def _movers_rows(items, accent, sign="", limit=10):
         rows = ""
@@ -732,30 +684,27 @@ if not returns.empty:
             mgn_f = _safe_float(co.get("ebitda_margin"))
             mgn_str = f'{mgn_f*100:.0f}%' if mgn_f is not None else "\u2014"
 
-            spark = _mini_spark(ticker, accent)
-
             rows += (
                 f'<tr title="{_html_lib.escape(name)} \u2014 Source: Yahoo Finance / FactSet">'
-                f'<td style="text-align:center;font-size:10px;color:#9CA3AF;padding:3px 4px;">{i}</td>'
+                f'<td style="text-align:center;font-size:11px;color:#9CA3AF;padding:3px 4px;">{i}</td>'
                 f'<td style="text-align:left;padding:3px 6px;font-size:11px;">'
                 f'<span style="width:6px;height:6px;border-radius:50%;background:{sc};'
                 f'display:inline-block;vertical-align:middle;margin-right:3px;" '
                 f'title="{_html_lib.escape(_CB_LABELS.get(sk, sk))}"></span>'
                 f'{lh}<span style="color:#3B82F6;font-weight:600;" '
                 f'title="{_html_lib.escape(name)}">{_html_lib.escape(ticker)}</span></td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:11px;color:#6B7280;padding:3px 4px;"'
                 f' title="Source: FactSet">{_fmt_tev(ev_f)}</td>'
-                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f'<td style="text-align:center;font-size:11px;padding:3px 2px;"'
                 f' title="NTM EV/Revenue — Source: FactSet">{rev_cell}</td>'
-                f'<td style="text-align:center;font-size:10px;padding:3px 2px;"'
+                f'<td style="text-align:center;font-size:11px;padding:3px 2px;"'
                 f' title="NTM EV/EBITDA — Source: FactSet">{ebitda_cell}</td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:11px;color:#6B7280;padding:3px 4px;"'
                 f' title="NTM Revenue Growth — Source: FactSet">{gr_str}</td>'
-                f'<td style="text-align:right;font-size:10px;color:#6B7280;padding:3px 4px;"'
+                f'<td style="text-align:right;font-size:11px;color:#6B7280;padding:3px 4px;"'
                 f' title="EBITDA Margin — Source: FactSet">{mgn_str}</td>'
                 f'<td style="text-align:right;font-weight:700;font-size:11px;color:{accent};'
                 f'padding:3px 4px;">{sign}{pv:.1f}%</td>'
-                f'<td style="text-align:center;padding:3px 2px;">{spark}</td>'
                 f'</tr>'
             )
         return rows
@@ -782,12 +731,13 @@ if not returns.empty:
             f'<thead><tr style="border-bottom:1px solid #E5E7EB;background:#F9FAFB;">'
         )
         # Minimal header
-        for th_txt in ["#", "Ticker", "TEV", "Rev x", "EBITDA x", "Gr%", "Mgn%",
-                       "\u0394 Price", "Chart"]:
-            align = "center" if th_txt in ("#", "Rev x", "EBITDA x", "Chart") else (
-                "left" if th_txt == "Ticker" else "right")
+        for th_txt in ["#", "Ticker", "TEV", f"Rev x {_sub_hdr}", f"EBITDA x {_sub_hdr}",
+                       "Gr%", "Mgn%", "\u0394 Price"]:
+            align = "center" if "Rev x" in th_txt or "EBITDA x" in th_txt else (
+                "center" if th_txt == "#" else (
+                "left" if th_txt == "Ticker" else "right"))
             html += (
-                f'<th style="font-size:8px;color:#9CA3AF;text-transform:uppercase;'
+                f'<th style="font-size:9px;color:#9CA3AF;text-transform:uppercase;'
                 f'padding:3px 4px;text-align:{align};">{th_txt}</th>'
             )
         html += f'</tr></thead><tbody>{rows}</tbody></table></div>'
